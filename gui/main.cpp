@@ -251,7 +251,10 @@ bool launchChromeFallback(const QUrl& url) {
     if (chrome.isEmpty()) {
         return false;
     }
-    return QProcess::startDetached(chrome, {url.toString()});
+    const QString profileDir = QDir::tempPath() + "/algorithm_notebook_chrome_profile";
+    return QProcess::startDetached(
+        chrome,
+        {"--user-data-dir=" + profileDir, "--new-window", url.toString()});
 }
 
 bool bringBrowserToFront(const QUrl& url, const QString& titleHint) {
