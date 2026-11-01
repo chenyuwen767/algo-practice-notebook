@@ -53,6 +53,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -109,6 +110,7 @@ bool openExternalUrl(const QUrl& url) {
 struct BrowserWindowSearch {
     QString host;
     QString titleHint;
+    bool allowBrowserFallback = false;
     HWND window = nullptr;
 };
 
@@ -136,24 +138,29 @@ BOOL CALLBACK findBrowserWindow(HWND window, LPARAM data) {
         return FALSE;
     }
 
-    static const QStringList browserTitles = {
-        "Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave", "Opera"};
-    for (const QString& browser : browserTitles) {
-        if (text.contains(browser, Qt::CaseInsensitive)) {
-            search->window = window;
-            return FALSE;
+    if (search->allowBrowserFallback) {
+        static const QStringList browserTitles = {
+            "Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave", "Opera"};
+        for (const QString& browser : browserTitles) {
+            if (text.contains(browser, Qt::CaseInsensitive)) {
+                search->window = window;
+                return FALSE;
+            }
         }
     }
     return TRUE;
 }
 
-void bringBrowserToFront(const QUrl& url, const QString& titleHint) {
+bool bringBrowserToFront(const QUrl& url,
+                         const QString& titleHint,
+                         bool allowBrowserFallback) {
     BrowserWindowSearch search;
     search.host = url.host();
     search.titleHint = titleHint;
+    search.allowBrowserFallback = allowBrowserFallback;
     EnumWindows(findBrowserWindow, reinterpret_cast<LPARAM>(&search));
     if (search.window == nullptr) {
-        return;
+        return false;
     }
 
     AllowSetForegroundWindow(ASFW_ANY);
@@ -165,6 +172,7 @@ void bringBrowserToFront(const QUrl& url, const QString& titleHint) {
     flash.dwFlags = FLASHW_TRAY;
     flash.uCount = 2;
     FlashWindowEx(&flash);
+    return true;
 }
 #endif
 
@@ -1978,7 +1986,23 @@ private:
         taskStatus_->setText("已请求浏览器打开并复制链接：" + url.toString());
         taskStatus_->show();
 #ifdef Q_OS_WIN
-        QTimer::singleShot(900, qApp, [url, problemId] { bringBrowserToFront(url, problemId); });
+        auto focusAttempt = std::make_shared<std::function<void(int)>>();
+        std::weak_ptr<std::function<void(int)>> weakAttempt = focusAttempt;
+        *focusAttempt = [url, problemId, weakAttempt](int attempt) {
+            if (bringBrowserToFront(url, problemId, attempt >= 4)) {
+                return;
+            }
+            if (attempt < 4) {
+                if (const auto keep = weakAttempt.lock()) {
+                    QTimer::singleShot(800, qApp, [keep, attempt] {
+                        (*keep)(attempt + 1);
+                    });
+                }
+            }
+        };
+        QTimer::singleShot(700, qApp, [focusAttempt] {
+            (*focusAttempt)(0);
+        });
 #endif
         QTimer::singleShot(6000, this, [this] {
             if (taskStatus_ != nullptr) {
