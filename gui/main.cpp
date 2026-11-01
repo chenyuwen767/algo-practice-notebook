@@ -722,6 +722,9 @@ private:
             taskSearch_->setFocus();
             taskSearch_->selectAll();
         });
+        auto* openShortcut = new QShortcut(QKeySequence("Ctrl+O"), page);
+        openShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(openShortcut, &QShortcut::activated, this, [this] { openSelectedProblem(); });
         auto* deleteShortcut = new QShortcut(QKeySequence::Delete, taskTable_);
         deleteShortcut->setContext(Qt::WidgetShortcut);
         connect(deleteShortcut, &QShortcut::activated, this, [this] { deleteTask(); });
@@ -1049,6 +1052,14 @@ private:
     }
 
     int selectedTaskIndex() const {
+        const QModelIndexList selected = taskTable_->selectionModel()->selectedRows();
+        if (!selected.isEmpty()) {
+            const QModelIndex sourceIndex = taskProxy_->mapToSource(selected.first());
+            if (sourceIndex.isValid()) {
+                return sourceIndex.row();
+            }
+        }
+
         const QModelIndex proxyIndex = taskTable_->currentIndex();
         if (!proxyIndex.isValid()) {
             return -1;
@@ -1884,6 +1895,8 @@ private:
         }
 
         QApplication::clipboard()->setText(url.toString());
+        taskStatus_->setText("正在打开：" + url.toString());
+        taskStatus_->show();
         if (!openExternalUrl(url)) {
             QMessageBox::warning(
                 this,
