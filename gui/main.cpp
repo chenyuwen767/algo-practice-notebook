@@ -76,6 +76,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 #if __has_include("version.h")
@@ -90,16 +91,86 @@ QString taskText(const std::string& value) {
     return QString::fromUtf8(value.c_str());
 }
 
+#ifdef Q_OS_WIN
+bool launchDefaultBrowser(const QUrl& url, QString& error) {
+    QSettings userChoice(
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\"
+        "UrlAssociations\\https\\UserChoice",
+        QSettings::NativeFormat);
+    const QString progId = userChoice.value("ProgId").toString();
+    if (progId.isEmpty()) {
+        error = "没有找到 https 默认程序";
+        return false;
+    }
+
+    QSettings command(
+        "HKEY_CLASSES_ROOT\\" + progId + "\\shell\\open\\command",
+        QSettings::NativeFormat);
+    const QString commandLine = command.value(".").toString();
+    if (commandLine.isEmpty()) {
+        error = "默认浏览器没有 open 命令";
+        return false;
+    }
+
+    int argumentCount = 0;
+    LPWSTR* arguments = CommandLineToArgvW(
+        commandLine.toStdWString().c_str(), &argumentCount);
+    if (arguments == nullptr || argumentCount == 0) {
+        error = "无法解析默认浏览器命令";
+        LocalFree(arguments);
+        return false;
+    }
+
+    const QString program = QString::fromWCharArray(arguments[0]);
+    QStringList browserArguments;
+    bool replaced = false;
+    const QString urlText = url.toString();
+    for (int index = 1; index < argumentCount; ++index) {
+        QString argument = QString::fromWCharArray(arguments[index]);
+        if (argument.contains("%1")) {
+            argument.replace("%1", urlText);
+            replaced = true;
+        }
+        browserArguments.append(argument);
+    }
+    LocalFree(arguments);
+
+    if (!replaced) {
+        browserArguments.append(urlText);
+    }
+    if (program.isEmpty()) {
+        error = "默认浏览器路径为空";
+        return false;
+    }
+    if (!QProcess::startDetached(program, browserArguments)) {
+        error = "无法启动默认浏览器";
+        return false;
+    }
+    return true;
+}
+#endif
+
 bool openExternalUrl(const QUrl& url) {
-    if (QDesktopServices::openUrl(url)) {
+#ifdef Q_OS_WIN
+    QString browserError;
+    const bool defaultOpened = launchDefaultBrowser(url, browserError);
+    if (defaultOpened) {
+        return true;
+    }
+#endif
+    const bool desktopOpened = QDesktopServices::openUrl(url);
+    if (desktopOpened) {
         return true;
     }
 #ifdef Q_OS_WIN
     const QString encoded = url.toString(QUrl::FullyEncoded);
-    if (QProcess::startDetached("rundll32.exe", {"url.dll,FileProtocolHandler", encoded})) {
+    const bool rundllOpened = QProcess::startDetached(
+        "rundll32.exe", {"url.dll,FileProtocolHandler", encoded});
+    if (rundllOpened) {
         return true;
     }
-    if (QProcess::startDetached("cmd.exe", {"/c", "start", "", encoded})) {
+    const bool cmdOpened = QProcess::startDetached("cmd.exe", {"/c", "start", "", encoded});
+    if (cmdOpened) {
         return true;
     }
 #endif
