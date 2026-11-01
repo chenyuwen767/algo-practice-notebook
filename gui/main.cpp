@@ -157,11 +157,24 @@ bool openExternalUrl(const QUrl& url) {
 #ifdef Q_OS_WIN
     QString browserError;
     const bool defaultOpened = launchDefaultBrowser(url, browserError);
+    QFile log(QDir::tempPath() + "/algorithm_notebook_open.log");
+    if (log.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        log.write(QString("%1 default=%2 error=%3 url=%4\n")
+                      .arg(QDateTime::currentDateTime().toString(Qt::ISODate))
+                      .arg(defaultOpened)
+                      .arg(browserError, url.toString())
+                      .toUtf8());
+    }
     if (defaultOpened) {
         return true;
     }
 #endif
     const bool desktopOpened = QDesktopServices::openUrl(url);
+#ifdef Q_OS_WIN
+    if (log.isOpen()) {
+        log.write(QString("qdesktop=%1\n").arg(desktopOpened).toUtf8());
+    }
+#endif
     if (desktopOpened) {
         return true;
     }
@@ -169,10 +182,16 @@ bool openExternalUrl(const QUrl& url) {
     const QString encoded = url.toString(QUrl::FullyEncoded);
     const bool rundllOpened = QProcess::startDetached(
         "rundll32.exe", {"url.dll,FileProtocolHandler", encoded});
+    if (log.isOpen()) {
+        log.write(QString("rundll32=%1\n").arg(rundllOpened).toUtf8());
+    }
     if (rundllOpened) {
         return true;
     }
     const bool cmdOpened = QProcess::startDetached("cmd.exe", {"/c", "start", "", encoded});
+    if (log.isOpen()) {
+        log.write(QString("cmdstart=%1\n").arg(cmdOpened).toUtf8());
+    }
     if (cmdOpened) {
         return true;
     }
@@ -211,6 +230,28 @@ BOOL CALLBACK findBrowserWindow(HWND window, LPARAM data) {
         return FALSE;
     }
     return TRUE;
+}
+
+QString chromeExecutable() {
+    const QStringList candidates = {
+        qEnvironmentVariable("ProgramFiles") + "/Google/Chrome/Application/chrome.exe",
+        qEnvironmentVariable("ProgramFiles(x86)") + "/Google/Chrome/Application/chrome.exe",
+        qEnvironmentVariable("LOCALAPPDATA") + "/Google/Chrome/Application/chrome.exe",
+        QStandardPaths::findExecutable("chrome.exe")};
+    for (const QString& candidate : candidates) {
+        if (!candidate.isEmpty() && QFile::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+bool launchChromeFallback(const QUrl& url) {
+    const QString chrome = chromeExecutable();
+    if (chrome.isEmpty()) {
+        return false;
+    }
+    return QProcess::startDetached(chrome, {url.toString()});
 }
 
 bool bringBrowserToFront(const QUrl& url, const QString& titleHint) {
@@ -2047,7 +2088,7 @@ private:
 #ifdef Q_OS_WIN
         auto focusAttempt = std::make_shared<std::function<void(int)>>();
         std::weak_ptr<std::function<void(int)>> weakAttempt = focusAttempt;
-        *focusAttempt = [url, problemId, weakAttempt](int attempt) {
+        *focusAttempt = [this, url, problemId, weakAttempt](int attempt) {
             if (bringBrowserToFront(url, problemId)) {
                 return;
             }
@@ -2057,6 +2098,14 @@ private:
                         (*keep)(attempt + 1);
                     });
                 }
+                return;
+            }
+            if (launchChromeFallback(url)) {
+                taskStatus_->setText("默认浏览器未创建窗口，已改用 Chrome 打开：" +
+                                     url.toString());
+                QTimer::singleShot(1200, qApp, [url, problemId] {
+                    bringBrowserToFront(url, problemId);
+                });
             }
         };
         QTimer::singleShot(700, qApp, [focusAttempt] {
