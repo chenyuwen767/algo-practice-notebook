@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QAction>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -30,6 +31,7 @@
 #include <QNetworkAccessManager>
 #include <QPlainTextEdit>
 #include <QPixmap>
+#include <QProcess>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSaveFile>
@@ -78,6 +80,22 @@ namespace {
 
 QString taskText(const std::string& value) {
     return QString::fromUtf8(value.c_str());
+}
+
+bool openExternalUrl(const QUrl& url) {
+    if (QDesktopServices::openUrl(url)) {
+        return true;
+    }
+#ifdef Q_OS_WIN
+    const QString encoded = url.toString(QUrl::FullyEncoded);
+    if (QProcess::startDetached("rundll32.exe", {"url.dll,FileProtocolHandler", encoded})) {
+        return true;
+    }
+    if (QProcess::startDetached("cmd.exe", {"/c", "start", "", encoded})) {
+        return true;
+    }
+#endif
+    return false;
 }
 
 QString platformLabel(const QString& platform) {
@@ -492,6 +510,7 @@ private:
     QLabel* taskSummary_ = nullptr;
     QCheckBox* pendingOnly_ = nullptr;
     QLineEdit* taskSearch_ = nullptr;
+    QLabel* taskStatus_ = nullptr;
     TaskTableModel* taskModel_ = nullptr;
     TaskFilterProxyModel* taskProxy_ = nullptr;
     QTableView* taskTable_ = nullptr;
@@ -668,6 +687,12 @@ private:
         buttons->addWidget(deleteButton);
         buttons->addStretch();
         layout->addLayout(buttons);
+
+        taskStatus_ = new QLabel(page);
+        taskStatus_->setObjectName("hint");
+        taskStatus_->setWordWrap(true);
+        taskStatus_->hide();
+        layout->addWidget(taskStatus_);
 
         connect(pendingOnly_, &QCheckBox::toggled, this, [this](bool checked) {
             settings_.setValue("tasks/pendingOnly", checked);
@@ -1857,9 +1882,23 @@ private:
                 "这道题还没有有效的平台/题号。请先编辑任务并填写平台和题号。");
             return;
         }
-        if (!QDesktopServices::openUrl(url)) {
-            QMessageBox::warning(this, "无法打开浏览器", "请手动访问：\n" + url.toString());
+
+        QApplication::clipboard()->setText(url.toString());
+        if (!openExternalUrl(url)) {
+            QMessageBox::warning(
+                this,
+                "无法打开浏览器",
+                "未能启动系统浏览器。链接已复制到剪贴板，请手动粘贴访问：\n" +
+                    url.toString());
+            return;
         }
+        taskStatus_->setText("已请求浏览器打开并复制链接：" + url.toString());
+        taskStatus_->show();
+        QTimer::singleShot(6000, this, [this] {
+            if (taskStatus_ != nullptr) {
+                taskStatus_->hide();
+            }
+        });
     }
 
     void showLuoguError(const QString& error) {
