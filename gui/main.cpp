@@ -70,6 +70,13 @@
 #include "task_table_model.h"
 #include "weekly_chart.h"
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #if __has_include("version.h")
 #include "version.h"
 #else
@@ -97,6 +104,69 @@ bool openExternalUrl(const QUrl& url) {
 #endif
     return false;
 }
+
+#ifdef Q_OS_WIN
+struct BrowserWindowSearch {
+    QString host;
+    QString titleHint;
+    HWND window = nullptr;
+};
+
+BOOL CALLBACK findBrowserWindow(HWND window, LPARAM data) {
+    auto* search = reinterpret_cast<BrowserWindowSearch*>(data);
+    if (!IsWindowVisible(window)) {
+        return TRUE;
+    }
+
+    wchar_t title[1024] = {};
+    GetWindowTextW(window, title, 1024);
+    const QString text = QString::fromWCharArray(title).trimmed();
+    if (text.isEmpty()) {
+        return TRUE;
+    }
+
+    if (!search->titleHint.isEmpty() &&
+        text.contains(search->titleHint, Qt::CaseInsensitive)) {
+        search->window = window;
+        return FALSE;
+    }
+
+    if (!search->host.isEmpty() && text.contains(search->host, Qt::CaseInsensitive)) {
+        search->window = window;
+        return FALSE;
+    }
+
+    static const QStringList browserTitles = {
+        "Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave", "Opera"};
+    for (const QString& browser : browserTitles) {
+        if (text.contains(browser, Qt::CaseInsensitive)) {
+            search->window = window;
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+void bringBrowserToFront(const QUrl& url, const QString& titleHint) {
+    BrowserWindowSearch search;
+    search.host = url.host();
+    search.titleHint = titleHint;
+    EnumWindows(findBrowserWindow, reinterpret_cast<LPARAM>(&search));
+    if (search.window == nullptr) {
+        return;
+    }
+
+    AllowSetForegroundWindow(ASFW_ANY);
+    ShowWindow(search.window, SW_RESTORE);
+    SetForegroundWindow(search.window);
+    FLASHWINFO flash{};
+    flash.cbSize = sizeof(flash);
+    flash.hwnd = search.window;
+    flash.dwFlags = FLASHW_TRAY;
+    flash.uCount = 2;
+    FlashWindowEx(&flash);
+}
+#endif
 
 QString platformLabel(const QString& platform) {
     const QString lower = platform.trimmed().toLower();
@@ -1907,6 +1977,9 @@ private:
         }
         taskStatus_->setText("已请求浏览器打开并复制链接：" + url.toString());
         taskStatus_->show();
+#ifdef Q_OS_WIN
+        QTimer::singleShot(900, qApp, [url, problemId] { bringBrowserToFront(url, problemId); });
+#endif
         QTimer::singleShot(6000, this, [this] {
             if (taskStatus_ != nullptr) {
                 taskStatus_->hide();
