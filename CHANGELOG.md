@@ -52,3 +52,4 @@
 - Codeforces 缺失 rating/maxRating 时显示“暂无”，不再显示 0。
 - Codeforces 摘要文案改为结构化拼接，不再依赖字符串替换占位符。
 - “打开题目”现在会复制链接、显示状态栏提示，并在系统 URL 关联失败时尝试 Windows 备用启动方式。
+- 修复 Edge 的 `--single-argument` 把 URL 解析成畸形地址的问题，改为直接传 URL 给默认浏览器。

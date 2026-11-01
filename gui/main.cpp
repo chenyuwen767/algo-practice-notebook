@@ -127,6 +127,9 @@ bool launchDefaultBrowser(const QUrl& url, QString& error) {
     const QString urlText = url.toString();
     for (int index = 1; index < argumentCount; ++index) {
         QString argument = QString::fromWCharArray(arguments[index]);
+        if (argument == "--single-argument") {
+            continue;
+        }
         if (argument.contains("%1")) {
             argument.replace("%1", urlText);
             replaced = true;
