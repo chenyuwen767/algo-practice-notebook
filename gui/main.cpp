@@ -92,6 +92,11 @@ QString taskText(const std::string& value) {
 }
 
 #ifdef Q_OS_WIN
+QString uniqueBrowserProfile(const QString& prefix) {
+    const QString suffix = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return QDir::toNativeSeparators(QDir::tempPath() + "/" + prefix + "_" + suffix);
+}
+
 bool launchDefaultBrowser(const QUrl& url, QString& error) {
     QSettings userChoice(
         "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\"
@@ -129,10 +134,12 @@ bool launchDefaultBrowser(const QUrl& url, QString& error) {
     const QString urlText = url.toString();
     if (chromiumBrowser) {
         LocalFree(arguments);
-        const QString profileDir =
-            QDir::tempPath() + "/algorithm_notebook_browser_profile";
+        const QString profileDir = uniqueBrowserProfile("algorithm_notebook_browser");
         const QStringList browserArguments = {
-            "--user-data-dir=" + profileDir, "--new-window", urlText};
+            "--user-data-dir=" + profileDir,
+            "--new-window",
+            "--no-first-run",
+            urlText};
         if (!QProcess::startDetached(program, browserArguments)) {
             error = "无法启动默认浏览器";
             return false;
@@ -268,10 +275,13 @@ bool launchChromeFallback(const QUrl& url) {
     if (chrome.isEmpty()) {
         return false;
     }
-    const QString profileDir = QDir::tempPath() + "/algorithm_notebook_chrome_profile";
+    const QString profileDir = uniqueBrowserProfile("algorithm_notebook_chrome");
     return QProcess::startDetached(
         chrome,
-        {"--user-data-dir=" + profileDir, "--new-window", url.toString()});
+        {"--user-data-dir=" + profileDir,
+         "--new-window",
+         "--no-first-run",
+         url.toString()});
 }
 
 bool bringBrowserToFront(const QUrl& url, const QString& titleHint) {
