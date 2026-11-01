@@ -122,9 +122,26 @@ bool launchDefaultBrowser(const QUrl& url, QString& error) {
     }
 
     const QString program = QString::fromWCharArray(arguments[0]);
+    const QString programLower = program.toLower();
+    const bool chromiumBrowser =
+        programLower.contains("msedge") || programLower.contains("chrome") ||
+        programLower.contains("brave") || programLower.contains("opera");
+    const QString urlText = url.toString();
+    if (chromiumBrowser) {
+        LocalFree(arguments);
+        const QString profileDir =
+            QDir::tempPath() + "/algorithm_notebook_browser_profile";
+        const QStringList browserArguments = {
+            "--user-data-dir=" + profileDir, "--new-window", urlText};
+        if (!QProcess::startDetached(program, browserArguments)) {
+            error = "无法启动默认浏览器";
+            return false;
+        }
+        return true;
+    }
+
     QStringList browserArguments;
     bool replaced = false;
-    const QString urlText = url.toString();
     for (int index = 1; index < argumentCount; ++index) {
         QString argument = QString::fromWCharArray(arguments[index]);
         if (argument == "--single-argument") {
