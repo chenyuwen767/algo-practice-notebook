@@ -110,7 +110,6 @@ bool openExternalUrl(const QUrl& url) {
 struct BrowserWindowSearch {
     QString host;
     QString titleHint;
-    bool allowBrowserFallback = false;
     HWND window = nullptr;
 };
 
@@ -137,27 +136,13 @@ BOOL CALLBACK findBrowserWindow(HWND window, LPARAM data) {
         search->window = window;
         return FALSE;
     }
-
-    if (search->allowBrowserFallback) {
-        static const QStringList browserTitles = {
-            "Google Chrome", "Microsoft Edge", "Mozilla Firefox", "Brave", "Opera"};
-        for (const QString& browser : browserTitles) {
-            if (text.contains(browser, Qt::CaseInsensitive)) {
-                search->window = window;
-                return FALSE;
-            }
-        }
-    }
     return TRUE;
 }
 
-bool bringBrowserToFront(const QUrl& url,
-                         const QString& titleHint,
-                         bool allowBrowserFallback) {
+bool bringBrowserToFront(const QUrl& url, const QString& titleHint) {
     BrowserWindowSearch search;
     search.host = url.host();
     search.titleHint = titleHint;
-    search.allowBrowserFallback = allowBrowserFallback;
     EnumWindows(findBrowserWindow, reinterpret_cast<LPARAM>(&search));
     if (search.window == nullptr) {
         return false;
@@ -1989,7 +1974,7 @@ private:
         auto focusAttempt = std::make_shared<std::function<void(int)>>();
         std::weak_ptr<std::function<void(int)>> weakAttempt = focusAttempt;
         *focusAttempt = [url, problemId, weakAttempt](int attempt) {
-            if (bringBrowserToFront(url, problemId, attempt >= 4)) {
+            if (bringBrowserToFront(url, problemId)) {
                 return;
             }
             if (attempt < 4) {
