@@ -430,7 +430,7 @@ public:
             }
         }
 
-        setWindowTitle("算法练习任务本");
+        setWindowTitle(QString("算法练习任务本 v%1").arg(APP_VERSION));
         resize(960, 680);
         const QByteArray geometry = settings_.value("window/geometry").toByteArray();
         if (!geometry.isEmpty()) {
