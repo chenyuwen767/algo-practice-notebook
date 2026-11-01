@@ -28,8 +28,6 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QPlainTextEdit>
 #include <QPixmap>
 #include <QProgressBar>
@@ -62,6 +60,7 @@
 #include "codeforces_problem.h"
 #include "json_task_store.h"
 #include "luogu_problem.h"
+#include "oj_client.h"
 #include "study_stats.h"
 #include "task_export.h"
 #include "task_history.h"
@@ -72,7 +71,7 @@
 #if __has_include("version.h")
 #include "version.h"
 #else
-#define APP_VERSION "0.5.0"
+#define APP_VERSION "0.6.0"
 #endif
 
 namespace {
@@ -233,6 +232,7 @@ public:
         : dataFile_(dataInfo.path),
           dataWarning_(dataInfo.warning),
           network_(new QNetworkAccessManager(this)) {
+        ojClient_ = new OjClient(network_, this);
         const JsonLoadResult loaded = loadTasksJson(dataFile_);
         tasks_ = loaded.tasks;
         ensureTaskIds(tasks_);
@@ -483,6 +483,7 @@ private:
     std::vector<Task> tasks_;
     TaskHistory history_;
     QNetworkAccessManager* network_;
+    OjClient* ojClient_ = nullptr;
     QSettings settings_;
     QAction* undoAction_ = nullptr;
     bool dataLoadFailed_ = false;
@@ -503,6 +504,7 @@ private:
     WeeklyChart* statsWeeklyChart_ = nullptr;
     QLineEdit* codeforcesHandleInput_ = nullptr;
     QPushButton* codeforcesButton_ = nullptr;
+    QPushButton* codeforcesRefreshButton_ = nullptr;
     QLabel* codeforcesSummary_ = nullptr;
     QString codeforcesProfileSummary_;
     QPushButton* codeforcesVerifyButton_ = nullptr;
@@ -511,10 +513,12 @@ private:
     QTableWidget* codeforcesSubmissionsTable_ = nullptr;
     QLineEdit* luoguHandleInput_ = nullptr;
     QPushButton* luoguButton_ = nullptr;
+    QPushButton* luoguRefreshButton_ = nullptr;
     QLabel* luoguSummary_ = nullptr;
     QLabel* luoguDetails_ = nullptr;
     QLineEdit* luoguProblemInput_ = nullptr;
     QPushButton* luoguProblemButton_ = nullptr;
+    QPushButton* luoguProblemRefreshButton_ = nullptr;
     QLabel* luoguProblemInfo_ = nullptr;
     QPushButton* luoguLinkSelectedButton_ = nullptr;
     QPushButton* luoguCreateTaskButton_ = nullptr;
@@ -714,9 +718,12 @@ private:
         codeforcesHandleInput_ = new QLineEdit(searchCard);
         codeforcesHandleInput_->setPlaceholderText("输入 Codeforces handle");
         codeforcesButton_ = new QPushButton("查询账号", searchCard);
+        codeforcesRefreshButton_ = new QPushButton("刷新", searchCard);
+        codeforcesRefreshButton_->setToolTip("忽略 5 分钟缓存，重新请求");
         searchLayout->addWidget(new QLabel("账号", searchCard));
         searchLayout->addWidget(codeforcesHandleInput_);
         searchLayout->addWidget(codeforcesButton_);
+        searchLayout->addWidget(codeforcesRefreshButton_);
         layout->addWidget(searchCard);
 
         codeforcesSummary_ = new QLabel("输入公开的 Codeforces handle 后查询个人资料和提交记录。", page);
@@ -750,6 +757,8 @@ private:
         layout->addWidget(codeforcesSubmissionsTable_);
 
         connect(codeforcesButton_, &QPushButton::clicked, this, [this] { loadCodeforcesAccount(); });
+        connect(codeforcesRefreshButton_, &QPushButton::clicked, this,
+                [this] { loadCodeforcesAccount(true); });
         connect(codeforcesHandleInput_, &QLineEdit::returnPressed, this,
                 [this] { loadCodeforcesAccount(); });
         connect(codeforcesVerifyButton_, &QPushButton::clicked, this,
@@ -771,9 +780,12 @@ private:
         luoguHandleInput_ = new QLineEdit(searchCard);
         luoguHandleInput_->setPlaceholderText("输入洛谷用户名或 UID");
         luoguButton_ = new QPushButton("查询账号", searchCard);
+        luoguRefreshButton_ = new QPushButton("刷新", searchCard);
+        luoguRefreshButton_->setToolTip("忽略 5 分钟缓存，重新请求");
         searchLayout->addWidget(new QLabel("账号", searchCard));
         searchLayout->addWidget(luoguHandleInput_);
         searchLayout->addWidget(luoguButton_);
+        searchLayout->addWidget(luoguRefreshButton_);
         layout->addWidget(searchCard);
 
         luoguSummary_ = new QLabel("输入公开的洛谷用户名或 UID 后查询资料。", page);
@@ -794,8 +806,11 @@ private:
         luoguProblemInput_ = new QLineEdit(problemCard);
         luoguProblemInput_->setPlaceholderText("输入洛谷题号，例如 P1001");
         luoguProblemButton_ = new QPushButton("查询题目", problemCard);
+        luoguProblemRefreshButton_ = new QPushButton("刷新", problemCard);
+        luoguProblemRefreshButton_->setToolTip("忽略 5 分钟缓存，重新请求");
         problemRow->addWidget(luoguProblemInput_);
         problemRow->addWidget(luoguProblemButton_);
+        problemRow->addWidget(luoguProblemRefreshButton_);
         luoguProblemInfo_ = new QLabel(
             "查询公开题目信息后，可关联到当前选中的任务，或直接新建任务。", problemCard);
         luoguProblemInfo_->setObjectName("hint");
@@ -829,8 +844,12 @@ private:
         layout->addStretch();
 
         connect(luoguButton_, &QPushButton::clicked, this, [this] { loadLuoguAccount(); });
+        connect(luoguRefreshButton_, &QPushButton::clicked, this,
+                [this] { loadLuoguAccount(true); });
         connect(luoguHandleInput_, &QLineEdit::returnPressed, this, [this] { loadLuoguAccount(); });
         connect(luoguProblemButton_, &QPushButton::clicked, this, [this] { lookupLuoguProblem(); });
+        connect(luoguProblemRefreshButton_, &QPushButton::clicked, this,
+                [this] { lookupLuoguProblem(true); });
         connect(luoguProblemInput_, &QLineEdit::returnPressed, this,
                 [this] { lookupLuoguProblem(); });
         connect(luoguProblemInput_, &QLineEdit::textChanged, this, [this] {
@@ -1271,20 +1290,7 @@ private:
         return url;
     }
 
-    QNetworkRequest networkRequest(const QUrl& url) const {
-        QNetworkRequest request(url);
-        request.setTransferTimeout(15000);
-        return request;
-    }
-
-    QNetworkRequest luoguRequest(const QUrl& url) const {
-        QNetworkRequest request = networkRequest(url);
-        request.setHeader(QNetworkRequest::UserAgentHeader, "AlgorithmPracticeNotebook/1.0");
-        return request;
-    }
-
-    bool readHttpError(QNetworkReply* reply, QString& error) const {
-        const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    bool readHttpError(int statusCode, QString& error) const {
         if (statusCode == 429) {
             error = "请求过于频繁，请稍后重试。";
             return true;
@@ -1304,17 +1310,19 @@ private:
         return false;
     }
 
-    bool readCodeforcesResult(QNetworkReply* reply, QJsonArray& result, QString& error) const {
-        if (readHttpError(reply, error)) {
+    bool readCodeforcesResult(const OjResponse& response,
+                              QJsonArray& result,
+                              QString& error) const {
+        if (readHttpError(response.httpStatus, error)) {
             return false;
         }
-        if (reply->error() != QNetworkReply::NoError) {
-            error = reply->errorString();
+        if (!response.ok) {
+            error = response.error.isEmpty() ? "网络请求失败。" : response.error;
             return false;
         }
 
         QJsonParseError parseError;
-        const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+        const QJsonDocument document = QJsonDocument::fromJson(response.body, &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
             error = "Codeforces 返回了无法识别的数据。";
             return false;
@@ -1330,17 +1338,17 @@ private:
         return true;
     }
 
-    bool readJsonObject(QNetworkReply* reply, QJsonObject& result, QString& error) const {
-        if (readHttpError(reply, error)) {
+    bool readJsonObject(const OjResponse& response, QJsonObject& result, QString& error) const {
+        if (readHttpError(response.httpStatus, error)) {
             return false;
         }
-        if (reply->error() != QNetworkReply::NoError) {
-            error = reply->errorString();
+        if (!response.ok) {
+            error = response.error.isEmpty() ? "网络请求失败。" : response.error;
             return false;
         }
 
         QJsonParseError parseError;
-        const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+        const QJsonDocument document = QJsonDocument::fromJson(response.body, &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
             error = "服务返回了无法识别的数据。";
             return false;
@@ -1350,7 +1358,7 @@ private:
         return true;
     }
 
-    void loadCodeforcesAccount() {
+    void loadCodeforcesAccount(bool forceRefresh = false) {
         if (codeforcesLoading_) {
             return;
         }
@@ -1370,83 +1378,91 @@ private:
         codeforcesSummary_->setText("正在查询账号资料……");
         codeforcesSubmissionsTable_->setRowCount(0);
 
-        auto* reply = network_->get(networkRequest(codeforcesApiUrl("user.info", "handles", handle)));
-        connect(reply, &QNetworkReply::finished, this, [this, reply, handle] {
-            QJsonArray users;
-            QString error;
-            if (!readCodeforcesResult(reply, users, error) || users.isEmpty()) {
-                reply->deleteLater();
-                codeforcesLoading_ = false;
-                codeforcesSummary_->setText("查询失败：" + error);
-                codeforcesButton_->setEnabled(true);
-                return;
-            }
+        ojClient_->get(OjPlatform::Codeforces,
+                       codeforcesApiUrl("user.info", "handles", handle),
+                       forceRefresh,
+                       [this, handle, forceRefresh](const OjResponse& response) {
+                           QJsonArray users;
+                           QString error;
+                           if (!readCodeforcesResult(response, users, error) || users.isEmpty()) {
+                               codeforcesLoading_ = false;
+                               codeforcesSummary_->setText("查询失败：" + error);
+                               codeforcesButton_->setEnabled(true);
+                               return;
+                           }
 
-            const QJsonObject user = users.first().toObject();
-            const QString rank = user.value("rank").toString("未定级");
-            const QString rating = user.value("rating").isDouble()
-                ? QString::number(user.value("rating").toInt())
-                : "暂无";
-            const QString maxRating = user.value("maxRating").isDouble()
-                ? QString::number(user.value("maxRating").toInt())
-                : "暂无";
-            codeforcesProfileSummary_ = QString("%1（%2）  当前 rating：%3  最高 rating：%4")
-                                            .arg(user.value("handle").toString(handle))
-                                            .arg(rank)
-                                            .arg(rating)
-                                            .arg(maxRating);
-            codeforcesSummary_->setText(codeforcesProfileSummary_ + "\n正在读取最近提交……");
-            reply->deleteLater();
+                           const QJsonObject user = users.first().toObject();
+                           const QString rank = user.value("rank").toString("未定级");
+                           const QString rating = user.value("rating").isDouble()
+                               ? QString::number(user.value("rating").toInt())
+                               : "暂无";
+                           const QString maxRating = user.value("maxRating").isDouble()
+                               ? QString::number(user.value("maxRating").toInt())
+                               : "暂无";
+                           codeforcesProfileSummary_ =
+                               QString("%1（%2）  当前 rating：%3  最高 rating：%4")
+                                   .arg(user.value("handle").toString(handle))
+                                   .arg(rank)
+                                   .arg(rating)
+                                   .arg(maxRating);
+                           codeforcesSummary_->setText(codeforcesProfileSummary_ +
+                                                       "\n正在读取最近提交……");
 
-            QTimer::singleShot(2100, this, [this, handle] { loadRecentCodeforcesSubmissions(handle); });
-        });
+                           QTimer::singleShot(2100, this, [this, handle, forceRefresh] {
+                               loadRecentCodeforcesSubmissions(handle, forceRefresh);
+                           });
+                       });
     }
 
-    void loadRecentCodeforcesSubmissions(const QString& handle) {
-        auto* reply = network_->get(networkRequest(codeforcesApiUrl("user.status", "handle", handle)));
-        connect(reply, &QNetworkReply::finished, this, [this, reply] {
-            QJsonArray submissions;
-            QString error;
-            if (!readCodeforcesResult(reply, submissions, error)) {
-                reply->deleteLater();
-                codeforcesLoading_ = false;
-                solvedCodeforcesProblems_.clear();
-                codeforcesSummary_->setText(codeforcesProfileSummary_ + "\n提交记录读取失败：" + error);
-                codeforcesButton_->setEnabled(true);
-                return;
-            }
+    void loadRecentCodeforcesSubmissions(const QString& handle, bool forceRefresh = false) {
+        ojClient_->get(OjPlatform::Codeforces,
+                       codeforcesApiUrl("user.status", "handle", handle),
+                       forceRefresh,
+                       [this](const OjResponse& response) {
+                           QJsonArray submissions;
+                           QString error;
+                           if (!readCodeforcesResult(response, submissions, error)) {
+                               codeforcesLoading_ = false;
+                               solvedCodeforcesProblems_.clear();
+                               codeforcesSummary_->setText(codeforcesProfileSummary_ +
+                                                           "\n提交记录读取失败：" + error);
+                               codeforcesButton_->setEnabled(true);
+                               return;
+                           }
 
-            QSet<QString> solved;
-            solvedCodeforcesProblems_.clear();
-            for (const QJsonValue& value : submissions) {
-                const QJsonObject submission = value.toObject();
-                if (submission.value("verdict").toString() != "OK") {
-                    continue;
-                }
-                const QJsonObject problem = submission.value("problem").toObject();
-                const QString key = codeforcesProblemKey(problem.value("contestId").toInt(),
-                                                         problem.value("index").toString());
-                if (key.isEmpty()) {
-                    continue;
-                }
-                solved.insert(key);
-                if (!solvedCodeforcesProblems_.contains(key)) {
-                    solvedCodeforcesProblems_.insert(key, problem);
-                }
-            }
+                           QSet<QString> solved;
+                           solvedCodeforcesProblems_.clear();
+                           for (const QJsonValue& value : submissions) {
+                               const QJsonObject submission = value.toObject();
+                               if (submission.value("verdict").toString() != "OK") {
+                                   continue;
+                               }
+                               const QJsonObject problem = submission.value("problem").toObject();
+                               const QString key = codeforcesProblemKey(
+                                   problem.value("contestId").toInt(),
+                                   problem.value("index").toString());
+                               if (key.isEmpty()) {
+                                   continue;
+                               }
+                               solved.insert(key);
+                               if (!solvedCodeforcesProblems_.contains(key)) {
+                                   solvedCodeforcesProblems_.insert(key, problem);
+                               }
+                           }
 
-            codeforcesVerifyButton_->setEnabled(!solvedCodeforcesProblems_.isEmpty());
-            codeforcesImportButton_->setEnabled(!solvedCodeforcesProblems_.isEmpty());
-            codeforcesSummary_->setText(
-                codeforcesProfileSummary_ +
-                QString("\n最近 1000 次提交中通过 %1 道不同题目；返回提交数：%2")
-                    .arg(solved.size())
-                    .arg(submissions.size()));
-            showCodeforcesSubmissions(submissions);
-            reply->deleteLater();
-            codeforcesLoading_ = false;
-            codeforcesButton_->setEnabled(true);
-        });
+                           codeforcesVerifyButton_->setEnabled(
+                               !solvedCodeforcesProblems_.isEmpty());
+                           codeforcesImportButton_->setEnabled(
+                               !solvedCodeforcesProblems_.isEmpty());
+                           codeforcesSummary_->setText(
+                               codeforcesProfileSummary_ +
+                               QString("\n最近 1000 次提交中通过 %1 道不同题目；返回提交数：%2")
+                                   .arg(solved.size())
+                                   .arg(submissions.size()));
+                           showCodeforcesSubmissions(submissions);
+                           codeforcesLoading_ = false;
+                           codeforcesButton_->setEnabled(true);
+                       });
     }
 
     void showCodeforcesSubmissions(const QJsonArray& submissions) {
@@ -1577,7 +1593,7 @@ private:
                                      .arg(static_cast<int>(missing.size())));
     }
 
-    void loadLuoguAccount() {
+    void loadLuoguAccount(bool forceRefresh = false) {
         if (luoguLoading_) {
             return;
         }
@@ -1597,7 +1613,7 @@ private:
         bool isUid = false;
         const int uid = account.toInt(&isUid);
         if (isUid) {
-            loadLuoguProfile(uid);
+            loadLuoguProfile(uid, forceRefresh);
             return;
         }
 
@@ -1606,78 +1622,79 @@ private:
         query.addQueryItem("keyword", account);
         url.setQuery(query);
 
-        auto* reply = network_->get(luoguRequest(url));
-        connect(reply, &QNetworkReply::finished, this, [this, reply, account] {
-            QJsonObject response;
-            QString error;
-            if (!readJsonObject(reply, response, error)) {
-                reply->deleteLater();
-                showLuoguError(error);
-                return;
-            }
+        ojClient_->get(OjPlatform::Luogu,
+                       url,
+                       forceRefresh,
+                       [this, account, forceRefresh](const OjResponse& response) {
+                           QJsonObject json;
+                           QString error;
+                           if (!readJsonObject(response, json, error)) {
+                               showLuoguError(error);
+                               return;
+                           }
 
-            const QJsonArray users = response.value("users").toArray();
-            if (users.isEmpty()) {
-                reply->deleteLater();
-                showLuoguError("未找到匹配的公开账号。");
-                return;
-            }
+                           const QJsonArray users = json.value("users").toArray();
+                           if (users.isEmpty()) {
+                               showLuoguError("未找到匹配的公开账号。");
+                               return;
+                           }
 
-            QJsonObject selected = users.first().toObject();
-            for (const QJsonValue& value : users) {
-                const QJsonObject candidate = value.toObject();
-                if (candidate.value("name").toString().compare(account, Qt::CaseInsensitive) == 0) {
-                    selected = candidate;
-                    break;
-                }
-            }
+                           QJsonObject selected = users.first().toObject();
+                           for (const QJsonValue& value : users) {
+                               const QJsonObject candidate = value.toObject();
+                               if (candidate.value("name").toString().compare(
+                                       account, Qt::CaseInsensitive) == 0) {
+                                   selected = candidate;
+                                   break;
+                               }
+                           }
 
-            reply->deleteLater();
-            loadLuoguProfile(selected.value("uid").toInt());
-        });
+                           loadLuoguProfile(selected.value("uid").toInt(), forceRefresh);
+                       });
     }
 
-    void loadLuoguProfile(int uid) {
+    void loadLuoguProfile(int uid, bool forceRefresh = false) {
         const QUrl url("https://www.luogu.com.cn/api/user/info/" + QString::number(uid));
-        auto* reply = network_->get(luoguRequest(url));
-        connect(reply, &QNetworkReply::finished, this, [this, reply] {
-            QJsonObject response;
-            QString error;
-            if (!readJsonObject(reply, response, error)) {
-                reply->deleteLater();
-                showLuoguError(error);
-                return;
-            }
+        ojClient_->get(OjPlatform::Luogu,
+                       url,
+                       forceRefresh,
+                       [this](const OjResponse& response) {
+                           QJsonObject json;
+                           QString error;
+                           if (!readJsonObject(response, json, error)) {
+                               showLuoguError(error);
+                               return;
+                           }
 
-            const QJsonObject user = response.value("user").toObject();
-            if (user.isEmpty()) {
-                reply->deleteLater();
-                showLuoguError("该账号资料不可见或不存在。");
-                return;
-            }
+                           const QJsonObject user = json.value("user").toObject();
+                           if (user.isEmpty()) {
+                               showLuoguError("该账号资料不可见或不存在。");
+                               return;
+                           }
 
-            const QString elo = user.value("eloValue").isDouble()
-                ? QString::number(user.value("eloValue").toDouble(), 'f', 0)
-                : "未公开";
-            luoguSummary_->setText(QString("%1（UID：%2）\n通过 %3 题 · 提交 %4 题 · 等级分：%5")
-                                       .arg(user.value("name").toString())
-                                       .arg(user.value("uid").toInt())
-                                       .arg(optionalNumber(user.value("passedProblemCount")))
-                                       .arg(optionalNumber(user.value("submittedProblemCount")))
-                                       .arg(elo));
-            luoguDetails_->setText(QString("CCF 等级：%1  ·  XCPC 等级：%2  ·  关注：%3  ·  粉丝：%4\n%5")
-                                      .arg(optionalNumber(user.value("ccfLevel")))
-                                      .arg(optionalNumber(user.value("xcpcLevel")))
-                                      .arg(optionalNumber(user.value("followingCount")))
-                                      .arg(optionalNumber(user.value("followerCount")))
-                                      .arg(user.value("slogan").toString("这个人很懒，什么都没写")));
-            reply->deleteLater();
-            luoguLoading_ = false;
-            luoguButton_->setEnabled(true);
-        });
+                           const QString elo = user.value("eloValue").isDouble()
+                               ? QString::number(user.value("eloValue").toDouble(), 'f', 0)
+                               : "未公开";
+                           luoguSummary_->setText(
+                               QString("%1（UID：%2）\n通过 %3 题 · 提交 %4 题 · 等级分：%5")
+                                   .arg(user.value("name").toString())
+                                   .arg(user.value("uid").toInt())
+                                   .arg(optionalNumber(user.value("passedProblemCount")))
+                                   .arg(optionalNumber(user.value("submittedProblemCount")))
+                                   .arg(elo));
+                           luoguDetails_->setText(
+                               QString("CCF 等级：%1  ·  XCPC 等级：%2  ·  关注：%3  ·  粉丝：%4\n%5")
+                                   .arg(optionalNumber(user.value("ccfLevel")))
+                                   .arg(optionalNumber(user.value("xcpcLevel")))
+                                   .arg(optionalNumber(user.value("followingCount")))
+                                   .arg(optionalNumber(user.value("followerCount")))
+                                   .arg(user.value("slogan").toString("这个人很懒，什么都没写")));
+                           luoguLoading_ = false;
+                           luoguButton_->setEnabled(true);
+                       });
     }
 
-    void lookupLuoguProblem() {
+    void lookupLuoguProblem(bool forceRefresh = false) {
         if (luoguProblemLoading_) {
             return;
         }
@@ -1698,49 +1715,50 @@ private:
         luoguCreateTaskButton_->setEnabled(false);
         luoguProblemInfo_->setText("正在查询公开题目信息……");
 
-        auto* reply = network_->get(luoguRequest(luoguProblemUrl(pid)));
-        connect(reply, &QNetworkReply::finished, this, [this, reply] {
-            const int statusCode =
-                reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            const QByteArray body = reply->readAll();
-            QString error;
+        ojClient_->get(OjPlatform::Luogu,
+                       luoguProblemUrl(pid),
+                       forceRefresh,
+                       [this](const OjResponse& response) {
+                           QString error;
+                           if (response.httpStatus == 404) {
+                               error = "题号不存在或题目不可见。";
+                           } else if (response.httpStatus != 0 &&
+                                      response.httpStatus != 200) {
+                               if (!readHttpError(response.httpStatus, error)) {
+                                   error = QString("洛谷返回 HTTP %1。")
+                                               .arg(response.httpStatus);
+                               }
+                           } else if (!response.ok) {
+                               error = "网络请求失败：" + response.error;
+                           }
 
-            if (statusCode == 404) {
-                error = "题号不存在或题目不可见。";
-            } else if (statusCode != 0 && statusCode != 200) {
-                if (!readHttpError(reply, error)) {
-                    error = QString("洛谷返回 HTTP %1。").arg(statusCode);
-                }
-            } else if (reply->error() != QNetworkReply::NoError) {
-                error = "网络请求失败：" + reply->errorString();
-            }
-            reply->deleteLater();
+                           luoguProblemLoading_ = false;
+                           luoguProblemButton_->setEnabled(true);
+                           if (!error.isEmpty()) {
+                               luoguProblemInfo_->setText("查询失败：" + error);
+                               return;
+                           }
 
-            luoguProblemLoading_ = false;
-            luoguProblemButton_->setEnabled(true);
-            if (!error.isEmpty()) {
-                luoguProblemInfo_->setText("查询失败：" + error);
-                return;
-            }
+                           LuoguProblem problem;
+                           QString parseError;
+                           if (!parseLuoguProblemHtml(QString::fromUtf8(response.body),
+                                                      problem,
+                                                      parseError)) {
+                               luoguProblemInfo_->setText("查询失败：" + parseError);
+                               return;
+                           }
 
-            LuoguProblem problem;
-            QString parseError;
-            if (!parseLuoguProblemHtml(QString::fromUtf8(body), problem, parseError)) {
-                luoguProblemInfo_->setText("查询失败：" + parseError);
-                return;
-            }
-
-            luoguProblem_ = problem;
-            luoguProblemInfo_->setText(
-                QString("%1 %2\n难度：%3 · 通过 %4 / 提交 %5")
-                    .arg(problem.pid,
-                         problem.name,
-                         luoguDifficultyLabel(problem.difficulty))
-                    .arg(problem.totalAccepted)
-                    .arg(problem.totalSubmit));
-            luoguLinkSelectedButton_->setEnabled(true);
-            luoguCreateTaskButton_->setEnabled(true);
-        });
+                           luoguProblem_ = problem;
+                           luoguProblemInfo_->setText(
+                               QString("%1 %2\n难度：%3 · 通过 %4 / 提交 %5")
+                                   .arg(problem.pid,
+                                        problem.name,
+                                        luoguDifficultyLabel(problem.difficulty))
+                                   .arg(problem.totalAccepted)
+                                   .arg(problem.totalSubmit));
+                           luoguLinkSelectedButton_->setEnabled(true);
+                           luoguCreateTaskButton_->setEnabled(true);
+                       });
     }
 
     void linkLuoguProblemToSelectedTask() {

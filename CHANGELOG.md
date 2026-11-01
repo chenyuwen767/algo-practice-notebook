@@ -2,7 +2,7 @@
 
 本项目的主要变化记录在这里。版本号遵循语义化版本。
 
-## [Unreleased] - v0.5.0
+## [Unreleased] - v0.6.0
 
 ### Added
 
@@ -14,6 +14,7 @@
 - 学习统计页：完成率、今日/本周/本月完成、连续打卡、每日目标、平台/分类/难度分布和最近 8 周自绘趋势图。
 - 任务增加创建/完成时间；完成、重开、导入 AC 时自动记录时间戳。
 - JSON v4 持久化（`tasks.json`），兼容 JSON v2/v3 和旧版 `tasks.txt`；旧文件保留。
+- `OjClient` 请求层：成功结果缓存 5 分钟，CF 2 秒/洛谷 1 秒限流，429 退避重试，手动刷新绕过缓存。
 - 任务表改用 `QAbstractTableModel` + `QSortFilterProxyModel`，排序/搜索/待完成筛选由代理统一处理。
 - 存储层单元测试（Qt Test），覆盖字段转义、备份、损坏行、旧格式、Unicode 路径。
 - Windows GitHub Actions：构建、测试、`windeployqt` 打包并上传 artifact。

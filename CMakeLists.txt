@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(algorithm_practice_notebook VERSION 0.5.0 LANGUAGES CXX)
+project(algorithm_practice_notebook VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,6 +18,7 @@ add_executable(task_notebook_gui WIN32
     src/codeforces_problem.cpp
     src/json_task_store.cpp
     src/luogu_problem.cpp
+    src/oj_client.cpp
     src/study_stats.cpp
     src/task_export.cpp
     src/task_history.cpp
@@ -103,6 +104,13 @@ if (BUILD_TESTING)
     target_include_directories(test_study_stats PRIVATE src)
     target_link_libraries(test_study_stats PRIVATE Qt6::Test)
 
+    add_executable(test_oj_client
+        tests/test_oj_client.cpp
+        src/oj_client.cpp
+    )
+    target_include_directories(test_oj_client PRIVATE src)
+    target_link_libraries(test_oj_client PRIVATE Qt6::Test Qt6::Network)
+
     if (MSVC)
         target_compile_options(test_task_store PRIVATE /W4 /permissive-)
         target_compile_options(test_app_paths PRIVATE /W4 /permissive-)
@@ -113,6 +121,7 @@ if (BUILD_TESTING)
         target_compile_options(test_codeforces_problem PRIVATE /W4 /permissive-)
         target_compile_options(test_luogu_problem PRIVATE /W4 /permissive-)
         target_compile_options(test_study_stats PRIVATE /W4 /permissive-)
+        target_compile_options(test_oj_client PRIVATE /W4 /permissive-)
     else()
         target_compile_options(test_task_store PRIVATE -Wall -Wextra -Wpedantic)
         target_compile_options(test_app_paths PRIVATE -Wall -Wextra -Wpedantic)
@@ -123,6 +132,7 @@ if (BUILD_TESTING)
         target_compile_options(test_codeforces_problem PRIVATE -Wall -Wextra -Wpedantic)
         target_compile_options(test_luogu_problem PRIVATE -Wall -Wextra -Wpedantic)
         target_compile_options(test_study_stats PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(test_oj_client PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 
     add_test(NAME task_store COMMAND test_task_store)
@@ -134,4 +144,5 @@ if (BUILD_TESTING)
     add_test(NAME codeforces_problem COMMAND test_codeforces_problem)
     add_test(NAME luogu_problem COMMAND test_luogu_problem)
     add_test(NAME study_stats COMMAND test_study_stats)
+    add_test(NAME oj_client COMMAND test_oj_client)
 endif()

@@ -19,6 +19,7 @@
 - 题目名称、分类、难度、平台、题号、标签或备注里包含 Tab、换行等字符时也能正确保存。
 - 输入 Codeforces handle 后查看等级、rating、最近提交和最近 1000 次提交里的不同 AC 题数；可核验关联任务，或把最近 AC 导入任务列表。
 - 输入洛谷题号可查询公开题目信息，关联到选中任务或直接新建任务；任务表可一键打开 Codeforces/洛谷题目页。
+- 网络请求统一走缓存和限流队列：成功结果缓存 5 分钟，CF 2 秒/洛谷 1 秒间隔，429 自动退避重试；查询旁可手动刷新。
 - 输入洛谷用户名或 UID 后查看公开资料、通过题数、提交题数、等级分与关注统计。
 - 使用统一的卡片、标签页、按钮与表格样式，便于切换和阅读信息。
 
@@ -89,6 +90,12 @@ Codeforces 官方 API 文档：[方法说明](https://codeforces.com/apiHelp/met
 .\scripts\package.ps1
 ```
 
+如果系统执行策略禁止运行未签名脚本，可只对本进程绕过：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package.ps1
+```
+
 脚本会执行 CMake 安装、`windeployqt`、补齐 MinGW/第三方依赖 DLL，并生成 `task_notebook_gui-windows.zip`。目标机器不需要安装 Qt 或 MSYS2。
 
 如果手工打包，至少需要：
@@ -122,6 +129,7 @@ windeployqt --release --no-translations --compiler-runtime dist\task_notebook_gu
 ├── src/codeforces_problem.*       # CF 题号归一化与匹配
 ├── src/json_task_store.*          # JSON v4 任务存储与备份
 ├── src/luogu_problem.*            # 洛谷题号、页面解析与链接
+├── src/oj_client.*                # 请求缓存、平台限流与退避
 ├── src/study_stats.*              # 完成率/连续打卡/分布/周趋势统计
 ├── src/task_export.*              # CSV 导出/导入
 ├── src/task_history.*             # 撤销快照栈
@@ -138,6 +146,7 @@ windeployqt --release --no-translations --compiler-runtime dist\task_notebook_gu
 ├── tests/test_codeforces_problem.cpp # CF 题号匹配测试（Qt Test）
 ├── tests/test_luogu_problem.cpp   # 洛谷题号/页面解析测试（Qt Test）
 ├── tests/test_study_stats.cpp     # 统计/streak/周趋势测试（Qt Test）
+├── tests/test_oj_client.cpp       # 缓存/限流策略测试（Qt Test）
 ├── scripts/package.ps1            # 便携版打包脚本
 ├── docs/ROADMAP.md                # 项目评估与后续发展规划
 ├── docs/RELEASE.md                # 发布检查清单

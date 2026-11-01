@@ -21,7 +21,7 @@
   ```
 
 - [ ] 0 编译警告（项目开启了 `-Wall -Wextra -Wpedantic` / `/W4`）。
-- [ ] 九个测试套件全部通过：`task_store`、`app_paths`、`task_export`、`task_history`、`json_task_store`、`task_table_model`、`codeforces_problem`、`luogu_problem`、`study_stats`。
+- [ ] 十个测试套件全部通过：`task_store`、`app_paths`、`task_export`、`task_history`、`json_task_store`、`task_table_model`、`codeforces_problem`、`luogu_problem`、`study_stats`、`oj_client`。
 - [ ] 启动冒烟：`--portable --smoke-test` 能构造窗口并自动退出（CI 使用 `Start-Process -Wait` 检查退出码）。
 
 ## 3. 数据安全验收
@@ -61,6 +61,8 @@
 - [ ] 洛谷正常账号：通过/提交/等级分/关注。
 - [ ] 洛谷统计为 `null` 的账号：显示“未公开”，不显示 0。
 - [ ] 断网：15 秒内给出错误提示，程序不卡死。
+- [ ] 5 分钟内重复查询同一账号命中缓存；点“刷新”后重新请求。
+- [ ] 连续查询多个 handle 时请求按 CF 2 秒/洛谷 1 秒串行，429 会自动退避一次。
 
 ## 6. 打包
 
@@ -87,7 +89,7 @@ Compress-Archive -Path dist\* -DestinationPath task_notebook_gui-windows.zip
 
 - [ ] `git status` 干净，`git log` 无遗漏。
 - [ ] 推送 `main` 到 `origin`。
-- [ ] 打 tag：`git tag -a v0.5.0 -m "v0.5.0"`，推送 tag。
+- [ ] 打 tag：`git tag -a v0.6.0 -m "v0.6.0"`，推送 tag。
 - [ ] GitHub Release 附上：
   - `task_notebook_gui-windows.zip`
   - `CHANGELOG.md` 对应段落
