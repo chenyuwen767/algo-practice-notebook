@@ -122,6 +122,14 @@ if ($QtBin) {
     Copy-MingwRuntimeDependencies -Directory $stage -QtBinDirectory $QtBin
 }
 
+# 冒烟测试的产物别混进发布包。
+foreach ($stray in @("smoke.png", "smoke.log")) {
+    $path = Join-Path $stage $stray
+    if (Test-Path $path) {
+        Remove-Item -LiteralPath $path -Force
+    }
+}
+
 # 便携版必须带说明和许可证，用户解压后能直接看到用法。
 foreach ($document in @("README.md", "LICENSE", "CHANGELOG.md")) {
     $source = Join-Path $root $document
@@ -131,16 +139,25 @@ foreach ($document in @("README.md", "LICENSE", "CHANGELOG.md")) {
 }
 
 # Qt 是 LGPLv3 动态链接，发布包里要带上许可证原文。
+$licenseSource = $null
 if ($QtBin) {
     $licenseSource = Join-Path (Split-Path $QtBin -Parent) "share\licenses\qt6-base"
-    if (Test-Path $licenseSource) {
-        $licenseTarget = Join-Path $stage "licenses"
-        New-Item -ItemType Directory -Path $licenseTarget -Force | Out-Null
-        Copy-Item -Path (Join-Path $licenseSource "*.txt") -Destination $licenseTarget
-        Write-Host "已附带 Qt 许可证文本。"
-    } else {
-        Write-Warning "未找到 Qt 许可证文本（$licenseSource），发布前请手动补上。"
+}
+# 有些 Qt 安装（比如 CI 里的预编译包）不带 share\licenses，退回仓库自带的副本。
+if (-not $licenseSource -or -not (Test-Path $licenseSource)) {
+    $licenseSource = Join-Path $root "licenses"
+}
+if (Test-Path $licenseSource) {
+    $licenseTarget = Join-Path $stage "licenses"
+    New-Item -ItemType Directory -Path $licenseTarget -Force | Out-Null
+    Copy-Item -Path (Join-Path $licenseSource "*") -Destination $licenseTarget -Recurse
+    $notice = Join-Path $root "licenses\NOTICE.md"
+    if (Test-Path $notice) {
+        Copy-Item -LiteralPath $notice -Destination $licenseTarget
     }
+    Write-Host "已附带许可证文本（$licenseSource）。"
+} else {
+    Write-Warning "未找到许可证文本（$licenseSource），发布前请手动补上。"
 }
 
 # README 里引用了 docs 下的截图，一并带上，解压后文档不会出现坏图。

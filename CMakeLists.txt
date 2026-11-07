@@ -51,6 +51,12 @@ target_link_libraries(task_notebook_gui PRIVATE Qt6::Widgets Qt6::Network projec
 
 install(TARGETS task_notebook_gui RUNTIME DESTINATION .)
 
+# 用 MSVC 构建时把 VC 运行库一并装进发布目录，用户机器不需要另装 VC++ 运行库。
+if(MSVC)
+    include(InstallRequiredSystemLibraries)
+    install(FILES ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} DESTINATION .)
+endif()
+
 include(CTest)
 if (BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
