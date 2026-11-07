@@ -12,6 +12,14 @@ configure_file(src/version.h.in "${CMAKE_BINARY_DIR}/generated/version.h" @ONLY)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Network)
 
+# 告警开关集中在一处，各目标通过链接这个接口库继承，不再逐个重复。
+add_library(project_warnings INTERFACE)
+if (MSVC)
+    target_compile_options(project_warnings INTERFACE /W4 /permissive-)
+else()
+    target_compile_options(project_warnings INTERFACE -Wall -Wextra -Wpedantic)
+endif()
+
 add_executable(task_notebook_gui WIN32
     gui/main.cpp
     src/app_paths.cpp
@@ -27,13 +35,7 @@ add_executable(task_notebook_gui WIN32
     src/weekly_chart.cpp
 )
 target_include_directories(task_notebook_gui PRIVATE src "${CMAKE_BINARY_DIR}/generated")
-target_link_libraries(task_notebook_gui PRIVATE Qt6::Widgets Qt6::Network)
-
-if (MSVC)
-    target_compile_options(task_notebook_gui PRIVATE /W4 /permissive-)
-else()
-    target_compile_options(task_notebook_gui PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+target_link_libraries(task_notebook_gui PRIVATE Qt6::Widgets Qt6::Network project_warnings)
 
 install(TARGETS task_notebook_gui RUNTIME DESTINATION .)
 
@@ -41,108 +43,24 @@ include(CTest)
 if (BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
-    add_executable(test_task_store
-        tests/test_task_store.cpp
-        src/task_store.cpp
-    )
-    target_include_directories(test_task_store PRIVATE src tests)
-    target_link_libraries(test_task_store PRIVATE Qt6::Test)
+    # 一个测试目标 = 源码 + include + 告警 + ctest 条目，避免每加一个套件就改三处。
+    function(add_project_test target)
+        add_executable(${target} ${ARGN})
+        target_include_directories(${target} PRIVATE src tests)
+        target_link_libraries(${target} PRIVATE Qt6::Test project_warnings)
+        string(REGEX REPLACE "^test_" "" test_name "${target}")
+        add_test(NAME ${test_name} COMMAND ${target})
+    endfunction()
 
-    add_executable(test_app_paths
-        tests/test_app_paths.cpp
-        src/app_paths.cpp
-    )
-    target_include_directories(test_app_paths PRIVATE src tests)
-    target_link_libraries(test_app_paths PRIVATE Qt6::Test)
-
-    add_executable(test_task_export
-        tests/test_task_export.cpp
-        src/task_export.cpp
-    )
-    target_include_directories(test_task_export PRIVATE src)
-    target_link_libraries(test_task_export PRIVATE Qt6::Test)
-
-    add_executable(test_task_history
-        tests/test_task_history.cpp
-        src/task_history.cpp
-    )
-    target_include_directories(test_task_history PRIVATE src)
-    target_link_libraries(test_task_history PRIVATE Qt6::Test)
-
-    add_executable(test_json_task_store
-        tests/test_json_task_store.cpp
-        src/json_task_store.cpp
-    )
-    target_include_directories(test_json_task_store PRIVATE src tests)
-    target_link_libraries(test_json_task_store PRIVATE Qt6::Test)
-
-    add_executable(test_task_table_model
-        tests/test_task_table_model.cpp
-        src/task_table_model.cpp
-    )
-    target_include_directories(test_task_table_model PRIVATE src tests)
-    target_link_libraries(test_task_table_model PRIVATE Qt6::Test)
-
-    add_executable(test_codeforces_problem
-        tests/test_codeforces_problem.cpp
-        src/codeforces_problem.cpp
-    )
-    target_include_directories(test_codeforces_problem PRIVATE src)
-    target_link_libraries(test_codeforces_problem PRIVATE Qt6::Test)
-
-    add_executable(test_luogu_problem
-        tests/test_luogu_problem.cpp
-        src/luogu_problem.cpp
-    )
-    target_include_directories(test_luogu_problem PRIVATE src)
-    target_link_libraries(test_luogu_problem PRIVATE Qt6::Test)
-
-    add_executable(test_study_stats
-        tests/test_study_stats.cpp
-        src/study_stats.cpp
-    )
-    target_include_directories(test_study_stats PRIVATE src)
-    target_link_libraries(test_study_stats PRIVATE Qt6::Test)
-
-    add_executable(test_oj_client
-        tests/test_oj_client.cpp
-        src/oj_client.cpp
-    )
-    target_include_directories(test_oj_client PRIVATE src)
-    target_link_libraries(test_oj_client PRIVATE Qt6::Test Qt6::Network)
-
-    if (MSVC)
-        target_compile_options(test_task_store PRIVATE /W4 /permissive-)
-        target_compile_options(test_app_paths PRIVATE /W4 /permissive-)
-        target_compile_options(test_task_export PRIVATE /W4 /permissive-)
-        target_compile_options(test_task_history PRIVATE /W4 /permissive-)
-        target_compile_options(test_json_task_store PRIVATE /W4 /permissive-)
-        target_compile_options(test_task_table_model PRIVATE /W4 /permissive-)
-        target_compile_options(test_codeforces_problem PRIVATE /W4 /permissive-)
-        target_compile_options(test_luogu_problem PRIVATE /W4 /permissive-)
-        target_compile_options(test_study_stats PRIVATE /W4 /permissive-)
-        target_compile_options(test_oj_client PRIVATE /W4 /permissive-)
-    else()
-        target_compile_options(test_task_store PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_app_paths PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_task_export PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_task_history PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_json_task_store PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_task_table_model PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_codeforces_problem PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_luogu_problem PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_study_stats PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(test_oj_client PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
-
-    add_test(NAME task_store COMMAND test_task_store)
-    add_test(NAME app_paths COMMAND test_app_paths)
-    add_test(NAME task_export COMMAND test_task_export)
-    add_test(NAME task_history COMMAND test_task_history)
-    add_test(NAME json_task_store COMMAND test_json_task_store)
-    add_test(NAME task_table_model COMMAND test_task_table_model)
-    add_test(NAME codeforces_problem COMMAND test_codeforces_problem)
-    add_test(NAME luogu_problem COMMAND test_luogu_problem)
-    add_test(NAME study_stats COMMAND test_study_stats)
-    add_test(NAME oj_client COMMAND test_oj_client)
+    add_project_test(test_task_store tests/test_task_store.cpp src/task_store.cpp)
+    add_project_test(test_app_paths tests/test_app_paths.cpp src/app_paths.cpp)
+    add_project_test(test_task_export tests/test_task_export.cpp src/task_export.cpp)
+    add_project_test(test_task_history tests/test_task_history.cpp src/task_history.cpp)
+    add_project_test(test_json_task_store tests/test_json_task_store.cpp src/json_task_store.cpp)
+    add_project_test(test_task_table_model tests/test_task_table_model.cpp src/task_table_model.cpp)
+    add_project_test(test_codeforces_problem tests/test_codeforces_problem.cpp src/codeforces_problem.cpp)
+    add_project_test(test_luogu_problem tests/test_luogu_problem.cpp src/luogu_problem.cpp)
+    add_project_test(test_study_stats tests/test_study_stats.cpp src/study_stats.cpp)
+    add_project_test(test_oj_client tests/test_oj_client.cpp src/oj_client.cpp)
+    target_link_libraries(test_oj_client PRIVATE Qt6::Network)
 endif()
