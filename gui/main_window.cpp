@@ -278,7 +278,7 @@ void MainWindow::openSelectedProblem() {
                 url.toString());
         return;
     }
-    taskStatus_->setText("已在浏览器打开，链接同时复制到剪贴板：" + url.toString());
+    taskStatus_->setText("已请求浏览器打开；若没反应，链接已在剪贴板：" + url.toString());
     taskStatus_->show();
     QTimer::singleShot(6000, this, [this] {
         if (taskStatus_ != nullptr) {

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(algorithm_practice_notebook VERSION 1.0.0 LANGUAGES CXX)
+project(algorithm_practice_notebook VERSION 1.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -83,4 +83,7 @@ if (BUILD_TESTING)
     add_project_test(test_study_stats tests/test_study_stats.cpp src/study_stats.cpp src/difficulty.cpp)
     add_project_test(test_oj_client tests/test_oj_client.cpp src/oj_client.cpp)
     target_link_libraries(test_oj_client PRIVATE Qt6::Network)
+    add_project_test(test_external_links tests/test_external_links.cpp gui/external_links.cpp)
+    target_include_directories(test_external_links PRIVATE gui)
+    target_link_libraries(test_external_links PRIVATE Qt6::Gui)
 endif()
