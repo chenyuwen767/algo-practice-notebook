@@ -22,6 +22,10 @@ endif()
 
 add_executable(task_notebook_gui WIN32
     gui/main.cpp
+    gui/external_links.cpp
+    gui/style.cpp
+    gui/task_dialog.cpp
+    gui/task_util.cpp
     src/app_paths.cpp
     src/codeforces_problem.cpp
     src/json_task_store.cpp

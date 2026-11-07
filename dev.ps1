@@ -4,6 +4,8 @@
 #   .\dev.ps1 -Clean       删掉 build/ 重新配置
 #   .\dev.ps1 -NoTest      只构建
 #   .\dev.ps1 -NoSmoke     跳过 --smoke-test 启动检查
+# 若提示“未对文件进行数字签名”，用：
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1
 param(
     [switch]$Clean,
     [switch]$NoTest,
@@ -39,8 +41,11 @@ if (-not $NoTest) {
 
 if (-not $NoSmoke) {
     Write-Host "== 冒烟启动" -ForegroundColor Cyan
-    & (Join-Path $build 'task_notebook_gui.exe') --smoke-test
-    if ($LASTEXITCODE -ne 0) { throw "冒烟测试失败（退出码 $LASTEXITCODE）" }
+    $exe = Join-Path $build 'task_notebook_gui.exe'
+    $proc = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -Wait
+    if ($proc.ExitCode -ne 0) {
+        throw "冒烟测试失败（退出码 $($proc.ExitCode)），诊断见 build\smoke.log"
+    }
 }
 
 Write-Host "== 完成" -ForegroundColor Green

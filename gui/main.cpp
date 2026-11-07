@@ -71,386 +71,19 @@
 #include "task_table_model.h"
 #include "weekly_chart.h"
 
-#ifdef Q_OS_WIN
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <shellapi.h>
-#endif
+
+#include "external_links.h"
+#include "style.h"
+#include "task_dialog.h"
+#include "task_util.h"
+
+using namespace taskui;
 
 #if __has_include("version.h")
 #include "version.h"
 #else
 #define APP_VERSION "0.6.0"
 #endif
-
-namespace {
-
-QString taskText(const std::string& value) {
-    return QString::fromUtf8(value.c_str());
-}
-
-#ifdef Q_OS_WIN
-QString uniqueBrowserProfile(const QString& prefix) {
-    const QString suffix = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    return QDir::toNativeSeparators(QDir::tempPath() + "/" + prefix + "_" + suffix);
-}
-
-bool launchDefaultBrowser(const QUrl& url, QString& error) {
-    QSettings userChoice(
-        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\"
-        "UrlAssociations\\https\\UserChoice",
-        QSettings::NativeFormat);
-    const QString progId = userChoice.value("ProgId").toString();
-    if (progId.isEmpty()) {
-        error = "没有找到 https 默认程序";
-        return false;
-    }
-
-    QSettings command(
-        "HKEY_CLASSES_ROOT\\" + progId + "\\shell\\open\\command",
-        QSettings::NativeFormat);
-    const QString commandLine = command.value(".").toString();
-    if (commandLine.isEmpty()) {
-        error = "默认浏览器没有 open 命令";
-        return false;
-    }
-
-    int argumentCount = 0;
-    LPWSTR* arguments = CommandLineToArgvW(
-        commandLine.toStdWString().c_str(), &argumentCount);
-    if (arguments == nullptr || argumentCount == 0) {
-        error = "无法解析默认浏览器命令";
-        LocalFree(arguments);
-        return false;
-    }
-
-    const QString program = QString::fromWCharArray(arguments[0]);
-    const QString programLower = program.toLower();
-    const bool chromiumBrowser =
-        programLower.contains("msedge") || programLower.contains("chrome") ||
-        programLower.contains("brave") || programLower.contains("opera");
-    const QString urlText = url.toString();
-    if (chromiumBrowser) {
-        LocalFree(arguments);
-        const QString profileDir = uniqueBrowserProfile("algorithm_notebook_browser");
-        const QStringList browserArguments = {
-            "--user-data-dir=" + profileDir,
-            "--new-window",
-            "--no-first-run",
-            urlText};
-        if (!QProcess::startDetached(program, browserArguments)) {
-            error = "无法启动默认浏览器";
-            return false;
-        }
-        return true;
-    }
-
-    QStringList browserArguments;
-    bool replaced = false;
-    for (int index = 1; index < argumentCount; ++index) {
-        QString argument = QString::fromWCharArray(arguments[index]);
-        if (argument == "--single-argument") {
-            continue;
-        }
-        if (argument.contains("%1")) {
-            argument.replace("%1", urlText);
-            replaced = true;
-        }
-        browserArguments.append(argument);
-    }
-    LocalFree(arguments);
-
-    if (!replaced) {
-        browserArguments.append(urlText);
-    }
-    if (program.isEmpty()) {
-        error = "默认浏览器路径为空";
-        return false;
-    }
-    if (!QProcess::startDetached(program, browserArguments)) {
-        error = "无法启动默认浏览器";
-        return false;
-    }
-    return true;
-}
-#endif
-
-bool openExternalUrl(const QUrl& url) {
-#ifdef Q_OS_WIN
-    QString browserError;
-    const bool defaultOpened = launchDefaultBrowser(url, browserError);
-    QFile log(QDir::tempPath() + "/algorithm_notebook_open.log");
-    if (log.open(QIODevice::WriteOnly | QIODevice::Append)) {
-        log.write(QString("%1 default=%2 error=%3 url=%4\n")
-                      .arg(QDateTime::currentDateTime().toString(Qt::ISODate))
-                      .arg(defaultOpened)
-                      .arg(browserError, url.toString())
-                      .toUtf8());
-    }
-    if (defaultOpened) {
-        return true;
-    }
-#endif
-    const bool desktopOpened = QDesktopServices::openUrl(url);
-#ifdef Q_OS_WIN
-    if (log.isOpen()) {
-        log.write(QString("qdesktop=%1\n").arg(desktopOpened).toUtf8());
-    }
-#endif
-    if (desktopOpened) {
-        return true;
-    }
-#ifdef Q_OS_WIN
-    const QString encoded = url.toString(QUrl::FullyEncoded);
-    const bool rundllOpened = QProcess::startDetached(
-        "rundll32.exe", {"url.dll,FileProtocolHandler", encoded});
-    if (log.isOpen()) {
-        log.write(QString("rundll32=%1\n").arg(rundllOpened).toUtf8());
-    }
-    if (rundllOpened) {
-        return true;
-    }
-    const bool cmdOpened = QProcess::startDetached("cmd.exe", {"/c", "start", "", encoded});
-    if (log.isOpen()) {
-        log.write(QString("cmdstart=%1\n").arg(cmdOpened).toUtf8());
-    }
-    if (cmdOpened) {
-        return true;
-    }
-#endif
-    return false;
-}
-
-#ifdef Q_OS_WIN
-struct BrowserWindowSearch {
-    QString host;
-    QString titleHint;
-    HWND window = nullptr;
-};
-
-BOOL CALLBACK findBrowserWindow(HWND window, LPARAM data) {
-    auto* search = reinterpret_cast<BrowserWindowSearch*>(data);
-    if (!IsWindowVisible(window)) {
-        return TRUE;
-    }
-
-    wchar_t title[1024] = {};
-    GetWindowTextW(window, title, 1024);
-    const QString text = QString::fromWCharArray(title).trimmed();
-    if (text.isEmpty()) {
-        return TRUE;
-    }
-
-    if (!search->titleHint.isEmpty() &&
-        text.contains(search->titleHint, Qt::CaseInsensitive)) {
-        search->window = window;
-        return FALSE;
-    }
-
-    if (!search->host.isEmpty() && text.contains(search->host, Qt::CaseInsensitive)) {
-        search->window = window;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-QString chromeExecutable() {
-    const QStringList candidates = {
-        qEnvironmentVariable("ProgramFiles") + "/Google/Chrome/Application/chrome.exe",
-        qEnvironmentVariable("ProgramFiles(x86)") + "/Google/Chrome/Application/chrome.exe",
-        qEnvironmentVariable("LOCALAPPDATA") + "/Google/Chrome/Application/chrome.exe",
-        QStandardPaths::findExecutable("chrome.exe")};
-    for (const QString& candidate : candidates) {
-        if (!candidate.isEmpty() && QFile::exists(candidate)) {
-            return candidate;
-        }
-    }
-    return {};
-}
-
-bool launchChromeFallback(const QUrl& url) {
-    const QString chrome = chromeExecutable();
-    if (chrome.isEmpty()) {
-        return false;
-    }
-    const QString profileDir = uniqueBrowserProfile("algorithm_notebook_chrome");
-    return QProcess::startDetached(
-        chrome,
-        {"--user-data-dir=" + profileDir,
-         "--new-window",
-         "--no-first-run",
-         url.toString()});
-}
-
-bool bringBrowserToFront(const QUrl& url, const QString& titleHint) {
-    BrowserWindowSearch search;
-    search.host = url.host();
-    search.titleHint = titleHint;
-    EnumWindows(findBrowserWindow, reinterpret_cast<LPARAM>(&search));
-    if (search.window == nullptr) {
-        return false;
-    }
-
-    AllowSetForegroundWindow(ASFW_ANY);
-    ShowWindow(search.window, SW_RESTORE);
-    SetForegroundWindow(search.window);
-    FLASHWINFO flash{};
-    flash.cbSize = sizeof(flash);
-    flash.hwnd = search.window;
-    flash.dwFlags = FLASHW_TRAY;
-    flash.uCount = 2;
-    FlashWindowEx(&flash);
-    return true;
-}
-#endif
-
-QString platformLabel(const QString& platform) {
-    const QString lower = platform.trimmed().toLower();
-    if (lower == "codeforces") {
-        return "Codeforces";
-    }
-    if (lower == "luogu") {
-        return "洛谷";
-    }
-    if (lower.isEmpty()) {
-        return "未标注";
-    }
-    return platform;
-}
-
-std::string toTaskText(const QString& value) {
-    return value.toUtf8().toStdString();
-}
-
-std::string nowIso() {
-    return QDateTime::currentDateTime().toString(Qt::ISODate).toStdString();
-}
-
-QString tagsText(const std::vector<std::string>& tags) {
-    return taskTagsText(tags);
-}
-
-std::vector<std::string> toTaskTags(const QString& text) {
-    QString normalized = text;
-    normalized.replace("，", ",");
-    normalized.replace("；", ";");
-    normalized.replace(";", ",");
-
-    std::vector<std::string> tags;
-    for (const QString& part : normalized.split(',', Qt::SkipEmptyParts)) {
-        const QString tag = part.trimmed();
-        if (!tag.isEmpty()) {
-            tags.push_back(toTaskText(tag));
-        }
-    }
-    return tags;
-}
-
-std::string newTaskId() {
-    return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
-}
-
-void ensureTaskIds(std::vector<Task>& tasks) {
-    for (Task& task : tasks) {
-        if (task.id.empty()) {
-            task.id = newTaskId();
-        }
-    }
-}
-
-QString displayPath(const std::filesystem::path& path) {
-    return QString::fromStdWString(path.wstring());
-}
-
-QString optionalNumber(const QJsonValue& value) {
-    return value.isDouble() ? QString::number(value.toInt()) : QString("未公开");
-}
-
-bool promptTaskFields(QWidget* parent,
-                      const QString& dialogTitle,
-                      QString& title,
-                      QString& category,
-                      QString& difficulty,
-                      QString& platform,
-                      QString& problemId,
-                      QString& tags,
-                      QString& notes) {
-    QDialog dialog(parent);
-    dialog.setWindowTitle(dialogTitle);
-    dialog.resize(480, 400);
-
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* form = new QFormLayout;
-    auto* titleEdit = new QLineEdit(title, &dialog);
-    auto* categoryEdit = new QLineEdit(category, &dialog);
-    auto* difficultyEdit = new QLineEdit(difficulty, &dialog);
-    auto* platformEdit = new QComboBox(&dialog);
-    platformEdit->addItem("（无）", QString());
-    platformEdit->addItem("Codeforces", QString("codeforces"));
-    platformEdit->addItem("洛谷", QString("luogu"));
-    const int platformIndex = platformEdit->findData(platform);
-    platformEdit->setCurrentIndex(platformIndex >= 0 ? platformIndex : 0);
-    auto* problemIdEdit = new QLineEdit(problemId, &dialog);
-    problemIdEdit->setPlaceholderText("例如 1900A 或 P1001");
-    auto* tagsEdit = new QLineEdit(tags, &dialog);
-    auto* notesEdit = new QPlainTextEdit(notes, &dialog);
-    tagsEdit->setPlaceholderText("多个标签用逗号分隔，例如：trie, xor");
-    notesEdit->setPlaceholderText("可记录思路、易错点、重做提醒等");
-    notesEdit->setFixedHeight(80);
-    form->addRow("题目名称：", titleEdit);
-    form->addRow("分类：", categoryEdit);
-    form->addRow("难度：", difficultyEdit);
-    form->addRow("平台：", platformEdit);
-    form->addRow("题号：", problemIdEdit);
-    form->addRow("标签：", tagsEdit);
-    form->addRow("备注：", notesEdit);
-    layout->addLayout(form);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText("确定");
-    buttons->button(QDialogButtonBox::Cancel)->setText("取消");
-    layout->addWidget(buttons);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    titleEdit->setFocus();
-
-    while (dialog.exec() == QDialog::Accepted) {
-        title = titleEdit->text().trimmed();
-        category = categoryEdit->text().trimmed();
-        difficulty = difficultyEdit->text().trimmed();
-        platform = platformEdit->currentData().toString();
-        problemId = problemIdEdit->text().trimmed();
-        if (platform == "codeforces" && !problemId.isEmpty()) {
-            const QString normalized = normalizeCodeforcesProblemId(problemId);
-            if (!normalized.isEmpty()) {
-                problemId = normalized;
-            }
-        }
-        tags = tagsEdit->text().trimmed();
-        notes = notesEdit->toPlainText().trimmed();
-        if (!title.isEmpty() && !category.isEmpty() && !difficulty.isEmpty()) {
-            return true;
-        }
-        QMessageBox::warning(&dialog, "无法保存", "题目名称、分类和难度都不能为空。");
-    }
-    return false;
-}
-
-app_paths::DataFileInfo resolveDataFileInfo() {
-    QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (directory.isEmpty()) {
-        directory = QCoreApplication::applicationDirPath();
-    }
-    return app_paths::resolveDataFileInfo(
-        QCoreApplication::arguments(),
-        QCoreApplication::applicationDirPath(),
-        QDir::currentPath(),
-        directory);
-}
-
-} // namespace
 
 class MainWindow : public QWidget {
 public:
@@ -507,112 +140,7 @@ public:
         if (!geometry.isEmpty()) {
             restoreGeometry(geometry);
         }
-        setStyleSheet(R"(
-            QWidget {
-                background: #f5f7fb;
-                color: #24324a;
-                font-family: "Microsoft YaHei";
-                font-size: 14px;
-            }
-            QLabel#appTitle {
-                color: #173b72;
-                font-size: 25px;
-                font-weight: 700;
-            }
-            QLabel#pageTitle {
-                color: #173b72;
-                font-size: 20px;
-                font-weight: 700;
-            }
-            QLabel#pageDescription, QLabel#hint {
-                color: #6a7890;
-            }
-            QFrame#card {
-                background: white;
-                border: 1px solid #e1e7f0;
-                border-radius: 10px;
-            }
-            QLabel#summaryCard {
-                background: #eef5ff;
-                border: 1px solid #cfe0fa;
-                border-radius: 8px;
-                color: #1c467f;
-                font-size: 15px;
-                font-weight: 600;
-                padding: 12px;
-            }
-            QLineEdit {
-                background: white;
-                border: 1px solid #cfd8e6;
-                border-radius: 7px;
-                padding: 8px 10px;
-                selection-background-color: #2c78d4;
-            }
-            QLineEdit:focus {
-                border: 2px solid #4d91e7;
-            }
-            QPushButton {
-                background: #2f7fd8;
-                border: 0;
-                border-radius: 7px;
-                color: white;
-                font-weight: 600;
-                padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background: #2169b8;
-            }
-            QPushButton:disabled {
-                background: #aab8c9;
-            }
-            QPushButton#dangerButton {
-                background: #c9463d;
-            }
-            QPushButton#dangerButton:hover {
-                background: #a9362f;
-            }
-            QTabWidget::pane {
-                background: white;
-                border: 1px solid #dfe6f0;
-                border-radius: 10px;
-                top: -1px;
-            }
-            QTabBar::tab {
-                background: #e9eef6;
-                border: 0;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                color: #52637c;
-                margin-right: 4px;
-                padding: 10px 20px;
-            }
-            QTabBar::tab:selected {
-                background: white;
-                color: #1d5fae;
-                font-weight: 700;
-            }
-            QHeaderView::section {
-                background: #edf3fb;
-                border: 0;
-                border-bottom: 1px solid #dbe5f1;
-                color: #42516a;
-                font-weight: 700;
-                padding: 9px;
-            }
-            QTableView, QTableWidget {
-                alternate-background-color: #f8faff;
-                background: white;
-                border: 1px solid #dfe6f0;
-                border-radius: 8px;
-                gridline-color: #edf1f6;
-                selection-background-color: #d9eafe;
-                selection-color: #1b3d69;
-            }
-            QCheckBox {
-                color: #52637c;
-                spacing: 7px;
-            }
-        )");
+        setStyleSheet(QString::fromUtf8(appStyleSheet()));
 
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(22, 18, 22, 22);
@@ -2103,8 +1631,6 @@ private:
         }
 
         QApplication::clipboard()->setText(url.toString());
-        taskStatus_->setText("正在打开：" + url.toString());
-        taskStatus_->show();
         if (!openExternalUrl(url)) {
             QMessageBox::warning(
                 this,
@@ -2113,35 +1639,8 @@ private:
                     url.toString());
             return;
         }
-        taskStatus_->setText("已请求浏览器打开并复制链接：" + url.toString());
+        taskStatus_->setText("已在浏览器打开，链接同时复制到剪贴板：" + url.toString());
         taskStatus_->show();
-#ifdef Q_OS_WIN
-        auto focusAttempt = std::make_shared<std::function<void(int)>>();
-        std::weak_ptr<std::function<void(int)>> weakAttempt = focusAttempt;
-        *focusAttempt = [this, url, problemId, weakAttempt](int attempt) {
-            if (bringBrowserToFront(url, problemId)) {
-                return;
-            }
-            if (attempt < 4) {
-                if (const auto keep = weakAttempt.lock()) {
-                    QTimer::singleShot(800, qApp, [keep, attempt] {
-                        (*keep)(attempt + 1);
-                    });
-                }
-                return;
-            }
-            if (launchChromeFallback(url)) {
-                taskStatus_->setText("默认浏览器未创建窗口，已改用 Chrome 打开：" +
-                                     url.toString());
-                QTimer::singleShot(1200, qApp, [url, problemId] {
-                    bringBrowserToFront(url, problemId);
-                });
-            }
-        };
-        QTimer::singleShot(700, qApp, [focusAttempt] {
-            (*focusAttempt)(0);
-        });
-#endif
         QTimer::singleShot(6000, this, [this] {
             if (taskStatus_ != nullptr) {
                 taskStatus_->hide();
@@ -2213,15 +1712,35 @@ int main(int argc, char* argv[]) {
     window.show();
 
     // Used by CI and local smoke checks: construct the real window, optionally
-    // save a screenshot, then quit.
+    // save a screenshot, then quit. 退出码非 0 表示窗口没渲染出来。
     if (QCoreApplication::arguments().contains("--smoke-test")) {
         QTimer::singleShot(700, &application, [&application, &window] {
             if (QCoreApplication::arguments().contains("--smoke-stats") &&
                 window.findChild<QTabWidget*>() != nullptr) {
                 window.findChild<QTabWidget*>()->setCurrentIndex(1);
             }
-            window.grab().save(QDir::tempPath() + "/algorithm_notebook_smoke.png");
+            const QPixmap shot = window.grab();
+            // 优先写程序目录（CI 直接从 build/ 收集产物），临时目录作为兜底。
+            const QString primary = QCoreApplication::applicationDirPath() + "/smoke.png";
+            const QString secondary = QDir::tempPath() + "/algorithm_notebook_smoke.png";
+            QString shotPath = primary;
+            bool saved = !shot.isNull() && shot.save(primary);
+            if (!saved && !shot.isNull()) {
+                shotPath = secondary;
+                saved = shot.save(secondary);
+            }
+            QFile log(QCoreApplication::applicationDirPath() + "/smoke.log");
+            if (log.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                log.write(QString("grab=%1 size=%2x%3 saved=%4 shot=%5 tempPath=%6\n")
+                              .arg(!shot.isNull())
+                              .arg(shot.width())
+                              .arg(shot.height())
+                              .arg(saved)
+                              .arg(shotPath, QDir::tempPath())
+                              .toUtf8());
+            }
             QTimer::singleShot(300, &application, &QCoreApplication::quit);
+            QCoreApplication::exit(saved ? 0 : 1);
         });
     }
 
