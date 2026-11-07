@@ -8,7 +8,7 @@
 - [ ] 更新 `CHANGELOG.md`，把 `[Unreleased]` 改为目标版本号并补日期。
 - [ ] 更新 `README.md` 中受影响的构建、数据位置或功能说明。
 - [ ] 确认 `LICENSE` 与版权年份正确。
-- [ ] 随便携包附上 Qt 的 LGPLv3 许可文本（Qt 安装目录或官网获取）。
+- [ ] 便携包里的 `licenses/` 已包含 Qt 的 LGPL-3.0 等许可文本（`scripts/package.ps1` 会自动从 Qt 安装目录拷贝）。
 
 ## 2. 构建与测试
 
@@ -21,8 +21,8 @@
   ```
 
 - [ ] 0 编译警告（项目开启了 `-Wall -Wextra -Wpedantic` / `/W4`）。
-- [ ] 十个测试套件全部通过：`task_store`、`app_paths`、`task_export`、`task_history`、`json_task_store`、`task_table_model`、`codeforces_problem`、`luogu_problem`、`study_stats`、`oj_client`。
-- [ ] 启动冒烟：`--portable --smoke-test` 能构造窗口并自动退出（CI 使用 `Start-Process -Wait` 检查退出码）。
+- [ ] 十二个测试套件全部通过：`task_store`、`app_paths`、`task_export`、`task_history`、`json_task_store`、`task_table_model`、`difficulty`、`practice`、`codeforces_problem`、`luogu_problem`、`study_stats`、`oj_client`。
+- [ ] 启动冒烟：`--portable --smoke-test` 能构造窗口并自动退出（CI 用 .NET 进程 + 60 秒超时检查退出码；`Start-Process -Wait` 在这个 WIN32 GUI 上会一直挂住）。
 
 ## 3. 数据安全验收
 
@@ -77,10 +77,10 @@
 ```powershell
 cmake --install build --prefix dist --config Release
 windeployqt --release --no-translations --compiler-runtime dist\task_notebook_gui.exe
-Compress-Archive -Path dist\* -DestinationPath task_notebook_gui-windows.zip
+Compress-Archive -Path "dist\algorithm-practice-notebook-<版本>-windows-x64\*" -DestinationPath "algorithm-practice-notebook-<版本>-windows-x64.zip"
 ```
 
-- [ ] `dist` 中包含 exe、Qt DLL、`platforms/qwindows.dll`，以及 `libgcc_s_seh-1.dll`、`libstdc++-6.dll`、ICU 等依赖。
+- [ ] `dist\algorithm-practice-notebook-<版本>-windows-x64\` 中包含 exe、Qt DLL、`platforms/qwindows.dll`、`libgcc_s_seh-1.dll`、`libstdc++-6.dll`、ICU 等依赖，以及 `README.md`、`LICENSE`、`CHANGELOG.md`、`licenses/`。
 - [ ] 在没有安装 Qt/MSYS2 的干净 Windows 上解压并启动。
 - [ ] 在另一台机器上完成一次“新增 → 保存 → 重开”。
 - [ ] 可选：用 Inno Setup/NSIS 生成安装包，验证开始菜单与卸载。
@@ -89,9 +89,9 @@ Compress-Archive -Path dist\* -DestinationPath task_notebook_gui-windows.zip
 
 - [ ] `git status` 干净，`git log` 无遗漏。
 - [ ] 推送 `main` 到 `origin`。
-- [ ] 打 tag：`git tag -a v0.6.0 -m "v0.6.0"`，推送 tag。
+- [ ] 打 tag：`git tag -a v1.0.0 -m "v1.0.0"`，推送 tag（CI 会构建、测试、打包并自动发布 Release）。
 - [ ] GitHub Release 附上：
-  - `task_notebook_gui-windows.zip`
+  - `algorithm-practice-notebook-1.0.0-windows-x64.zip`
   - `CHANGELOG.md` 对应段落
   - 数据位置与备份说明
   - 已知限制（洛谷非官方 API、CF 最近 1000 条）

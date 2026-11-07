@@ -130,6 +130,19 @@ foreach ($document in @("README.md", "LICENSE", "CHANGELOG.md")) {
     }
 }
 
+# Qt 是 LGPLv3 动态链接，发布包里要带上许可证原文。
+if ($QtBin) {
+    $licenseSource = Join-Path (Split-Path $QtBin -Parent) "share\licenses\qt6-base"
+    if (Test-Path $licenseSource) {
+        $licenseTarget = Join-Path $stage "licenses"
+        New-Item -ItemType Directory -Path $licenseTarget -Force | Out-Null
+        Copy-Item -Path (Join-Path $licenseSource "*.txt") -Destination $licenseTarget
+        Write-Host "已附带 Qt 许可证文本。"
+    } else {
+        Write-Warning "未找到 Qt 许可证文本（$licenseSource），发布前请手动补上。"
+    }
+}
+
 # README 里引用了 docs 下的截图，一并带上，解压后文档不会出现坏图。
 $docsSource = Join-Path $root "docs"
 if (Test-Path $docsSource) {
