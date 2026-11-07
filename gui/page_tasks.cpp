@@ -1,5 +1,7 @@
 #include "main_window.h"
 
+#include "difficulty.h"
+
 using namespace taskui;
 
 QWidget* MainWindow::createTasksPage() {
@@ -45,6 +47,8 @@ QWidget* MainWindow::createTasksPage() {
     taskTable_->horizontalHeader()->setSectionResizeMode(TaskTableModel::TitleColumn,
                                                          QHeaderView::Stretch);
     taskTable_->horizontalHeader()->setSectionResizeMode(TaskTableModel::ProblemColumn,
+                                                         QHeaderView::ResizeToContents);
+    taskTable_->horizontalHeader()->setSectionResizeMode(TaskTableModel::LevelColumn,
                                                          QHeaderView::ResizeToContents);
     taskTable_->verticalHeader()->setVisible(false);
     layout->addWidget(taskTable_);
@@ -169,6 +173,7 @@ void MainWindow::addTask() {
     task.title = toTaskText(title);
     task.category = toTaskText(category);
     task.difficulty = toTaskText(difficulty);
+    task.difficultyRank = difficultyRankFromText(task.difficulty);
     task.platform = toTaskText(platform);
     task.problemId = toTaskText(problemId);
     task.tags = toTaskTags(tags);
@@ -214,6 +219,8 @@ void MainWindow::editTask() {
     tasks_[static_cast<std::size_t>(index)].title = toTaskText(title);
     tasks_[static_cast<std::size_t>(index)].category = toTaskText(category);
     tasks_[static_cast<std::size_t>(index)].difficulty = toTaskText(difficulty);
+    tasks_[static_cast<std::size_t>(index)].difficultyRank =
+        difficultyRankFromText(tasks_[static_cast<std::size_t>(index)].difficulty);
     tasks_[static_cast<std::size_t>(index)].platform = toTaskText(platform);
     tasks_[static_cast<std::size_t>(index)].problemId = toTaskText(problemId);
     tasks_[static_cast<std::size_t>(index)].tags = toTaskTags(tags);

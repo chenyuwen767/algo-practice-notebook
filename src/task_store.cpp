@@ -5,6 +5,8 @@
 #include <system_error>
 #include <utility>
 
+#include "difficulty.h"
+
 namespace {
 
 constexpr const char* kFileHeader = "# algorithm-practice-notebook v2";
@@ -124,6 +126,7 @@ LoadResult loadTasksChecked(const std::filesystem::path& fileName) {
             task.category = unescapeField(task.category);
             task.difficulty = unescapeField(task.difficulty);
         }
+        task.difficultyRank = difficultyRankFromText(task.difficulty);
         task.completed = completedText == "1";
         result.tasks.push_back(std::move(task));
     }

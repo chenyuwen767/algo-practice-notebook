@@ -12,7 +12,11 @@
 
 #include <utility>
 
+#include "difficulty.h"
+
 namespace {
+
+constexpr int kCurrentVersion = 5;
 
 QString qpath(const std::filesystem::path& path) {
     return QString::fromStdWString(path.wstring());
@@ -47,8 +51,17 @@ JsonLoadResult loadTasksJson(const std::filesystem::path& fileName) {
     const QJsonObject root = document.object();
     const QJsonValue versionValue = root.value("version");
     const int version = versionValue.isDouble() ? versionValue.toInt() : 4;
-    if (version < 2 || version > 4) {
-        result.warnings.push_back("tasks.json 的版本不是 2/3/4，已按兼容方式读取。");
+    if (version < 2 || version > kCurrentVersion) {
+        result.warnings.push_back("tasks.json 的版本不是 2..5，已按兼容方式读取。");
+    }
+    if (version < kCurrentVersion) {
+        result.migrated = true;
+        // 升级到 v5 前先留一份原始副本：归一化写错时还能找回。
+        const QString original = qpath(fileName);
+        const QString snapshot = original + ".pre-v5";
+        if (!QFileInfo::exists(snapshot) && !QFile::copy(original, snapshot)) {
+            result.warnings.push_back("升级到 v5 前无法备份原文件（tasks.json.pre-v5）。");
+        }
     }
 
     const QJsonValue tasksValue = root.value("tasks");
@@ -78,6 +91,14 @@ JsonLoadResult loadTasksJson(const std::filesystem::path& fileName) {
         task.title = toStd(title);
         task.category = toStd(object.value("category").toString());
         task.difficulty = toStd(object.value("difficulty").toString());
+        const QJsonValue rankValue = object.value("difficultyRank");
+        if (rankValue.isDouble()) {
+            task.difficultyRank = rankValue.toInt(0);
+        }
+        if (task.difficultyRank <= 0 && !task.difficulty.empty()) {
+            // v4 及更早的文件没有这个字段，按文本重新归一一次。
+            task.difficultyRank = difficultyRankFromText(task.difficulty);
+        }
         task.completed = object.value("completed").toBool(false);
         task.notes = toStd(object.value("notes").toString());
         task.id = toStd(object.value("id").toString());
@@ -116,6 +137,7 @@ bool saveTasksJson(const std::vector<Task>& tasks,
         object.insert("title", QString::fromUtf8(task.title.c_str()));
         object.insert("category", QString::fromUtf8(task.category.c_str()));
         object.insert("difficulty", QString::fromUtf8(task.difficulty.c_str()));
+        object.insert("difficultyRank", task.difficultyRank);
         object.insert("completed", task.completed);
         object.insert("notes", QString::fromUtf8(task.notes.c_str()));
         object.insert("platform", QString::fromUtf8(task.platform.c_str()));
@@ -132,7 +154,7 @@ bool saveTasksJson(const std::vector<Task>& tasks,
     }
 
     QJsonObject root;
-    root.insert("version", 4);
+    root.insert("version", kCurrentVersion);
     root.insert("tasks", tasksArray);
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
 

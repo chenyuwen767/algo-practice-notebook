@@ -1,5 +1,7 @@
 #include "main_window.h"
 
+#include "difficulty.h"
+
 using namespace taskui;
 
 QWidget* MainWindow::createLuoguPage() {
@@ -322,6 +324,7 @@ void MainWindow::createTaskFromLuoguProblem() {
     task.title = toTaskText(title);
     task.category = toTaskText(category);
     task.difficulty = toTaskText(difficulty);
+    task.difficultyRank = difficultyRankFromText(task.difficulty);
     task.platform = toTaskText(platform);
     task.problemId = toTaskText(problemId);
     task.tags = toTaskTags(tags);

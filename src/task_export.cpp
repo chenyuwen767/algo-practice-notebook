@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "difficulty.h"
+
 namespace {
 
 enum class CsvFormat {
@@ -220,6 +222,7 @@ bool tasksFromCsv(const std::string& csv, std::vector<Task>& tasks, std::string&
         task.title = row[0];
         task.category = row[1];
         task.difficulty = row[2];
+        task.difficultyRank = difficultyRankFromText(task.difficulty);
         std::size_t statusColumn = 3;
         if (format == CsvFormat::V8) {
             task.platform = row[3];

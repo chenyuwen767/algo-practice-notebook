@@ -33,6 +33,7 @@ add_executable(task_notebook_gui WIN32
     gui/task_util.cpp
     src/app_paths.cpp
     src/codeforces_problem.cpp
+    src/difficulty.cpp
     src/json_task_store.cpp
     src/luogu_problem.cpp
     src/oj_client.cpp
@@ -61,15 +62,16 @@ if (BUILD_TESTING)
         add_test(NAME ${test_name} COMMAND ${target})
     endfunction()
 
-    add_project_test(test_task_store tests/test_task_store.cpp src/task_store.cpp)
+    add_project_test(test_task_store tests/test_task_store.cpp src/task_store.cpp src/difficulty.cpp)
     add_project_test(test_app_paths tests/test_app_paths.cpp src/app_paths.cpp)
-    add_project_test(test_task_export tests/test_task_export.cpp src/task_export.cpp)
+    add_project_test(test_task_export tests/test_task_export.cpp src/task_export.cpp src/difficulty.cpp)
     add_project_test(test_task_history tests/test_task_history.cpp src/task_history.cpp)
-    add_project_test(test_json_task_store tests/test_json_task_store.cpp src/json_task_store.cpp)
-    add_project_test(test_task_table_model tests/test_task_table_model.cpp src/task_table_model.cpp)
+    add_project_test(test_json_task_store tests/test_json_task_store.cpp src/json_task_store.cpp src/difficulty.cpp)
+    add_project_test(test_task_table_model tests/test_task_table_model.cpp src/task_table_model.cpp src/difficulty.cpp)
+    add_project_test(test_difficulty tests/test_difficulty.cpp src/difficulty.cpp)
     add_project_test(test_codeforces_problem tests/test_codeforces_problem.cpp src/codeforces_problem.cpp)
     add_project_test(test_luogu_problem tests/test_luogu_problem.cpp src/luogu_problem.cpp)
-    add_project_test(test_study_stats tests/test_study_stats.cpp src/study_stats.cpp)
+    add_project_test(test_study_stats tests/test_study_stats.cpp src/study_stats.cpp src/difficulty.cpp)
     add_project_test(test_oj_client tests/test_oj_client.cpp src/oj_client.cpp)
     target_link_libraries(test_oj_client PRIVATE Qt6::Network)
 endif()

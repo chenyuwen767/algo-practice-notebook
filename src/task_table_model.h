@@ -17,6 +17,7 @@ public:
         ProblemColumn,
         CategoryColumn,
         DifficultyColumn,
+        LevelColumn,
         TagsColumn,
         StatusColumn,
         ColumnCount

@@ -16,6 +16,9 @@ struct Task {
     std::string problemId = {};
     std::string createdAt = {};
     std::string completedAt = {};
+    // 归一化难度（与 Codeforces rating 同刻度，0 = 未标注），由 difficulty.cpp 计算。
+    // 放在末尾，避免打乱既有 Task 聚合初始化的字段顺序。
+    int difficultyRank = 0;
 };
 
 struct LoadResult {

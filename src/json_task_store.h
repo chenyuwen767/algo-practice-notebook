@@ -11,6 +11,8 @@ struct JsonLoadResult {
     bool ok = true;
     std::string error;
     std::vector<std::string> warnings;
+    // 读到的文件版本低于当前版本（v5），下次保存会写成新版本。
+    bool migrated = false;
 };
 
 JsonLoadResult loadTasksJson(const std::filesystem::path& fileName);

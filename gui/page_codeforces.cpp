@@ -1,5 +1,7 @@
 #include "main_window.h"
 
+#include "difficulty.h"
+
 using namespace taskui;
 
 QWidget* MainWindow::createCodeforcesPage() {
@@ -364,6 +366,7 @@ void MainWindow::importCodeforcesSolved() {
         task.title = toTaskText(name.isEmpty() ? "CF " + key : "CF " + key + " " + name);
         task.category = toTaskText("Codeforces");
         task.difficulty = toTaskText(rating > 0 ? QString::number(rating) : QString());
+        task.difficultyRank = difficultyRankFromText(task.difficulty);
         task.platform = "codeforces";
         task.problemId = toTaskText(key);
         task.completed = true;

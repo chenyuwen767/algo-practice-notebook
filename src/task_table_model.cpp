@@ -2,6 +2,8 @@
 
 #include <QStringList>
 
+#include "difficulty.h"
+
 QString taskTagsText(const std::vector<std::string>& tags) {
     QStringList values;
     for (const std::string& tag : tags) {
@@ -71,6 +73,8 @@ QVariant TaskTableModel::data(const QModelIndex& index, int role) const {
             return QString::fromUtf8(task.category.c_str());
         case DifficultyColumn:
             return QString::fromUtf8(task.difficulty.c_str());
+        case LevelColumn:
+            return QString::fromUtf8(difficultyBucket(task.difficultyRank).c_str());
         case TagsColumn:
             return taskTagsText(task.tags);
         case StatusColumn:
@@ -82,6 +86,10 @@ QVariant TaskTableModel::data(const QModelIndex& index, int role) const {
 
     if (role == Qt::ToolTipRole && index.column() == TitleColumn) {
         return QString::fromUtf8(task.notes.c_str());
+    }
+    if (role == Qt::ToolTipRole && index.column() == DifficultyColumn && task.difficultyRank > 0) {
+        return QString::fromUtf8(
+            difficultyDisplayText(task.difficulty, task.difficultyRank).c_str());
     }
     if (role == Qt::TextAlignmentRole && index.column() == StatusColumn) {
         return static_cast<int>(Qt::AlignCenter);
@@ -103,6 +111,8 @@ QVariant TaskTableModel::headerData(int section, Qt::Orientation orientation, in
         return QString("分类");
     case DifficultyColumn:
         return QString("难度");
+    case LevelColumn:
+        return QString("等第");
     case TagsColumn:
         return QString("标签");
     case StatusColumn:
@@ -170,6 +180,7 @@ bool TaskFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& so
         problemText(*task) + ' ' +
         QString::fromUtf8(task->category.c_str()) + ' ' +
         QString::fromUtf8(task->difficulty.c_str()) + ' ' +
+        QString::fromUtf8(difficultyBucket(task->difficultyRank).c_str()) + ' ' +
         taskTagsText(task->tags) + ' ' +
         QString::fromUtf8(task->notes.c_str());
     return haystack.contains(keyword_, Qt::CaseInsensitive);

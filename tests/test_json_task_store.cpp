@@ -35,6 +35,8 @@ private slots:
     void reportsInvalidEntriesWithoutDroppingValidOnes();
     void missingFileIsEmptyAndOk();
     void loadsVersion2WithoutNewFields();
+    void migratesVersion4ToRankedDifficulty();
+    void keepsRankWrittenByVersion5();
 };
 
 void JsonTaskStoreTest::roundTripPreservesAllFields() {
@@ -163,6 +165,51 @@ void JsonTaskStoreTest::loadsVersion2WithoutNewFields() {
     QVERIFY(loaded.tasks[0].problemId.empty());
     QVERIFY(loaded.tasks[0].createdAt.empty());
     QVERIFY(loaded.tasks[0].completedAt.empty());
+}
+
+void JsonTaskStoreTest::migratesVersion4ToRankedDifficulty() {
+    TempDir directory;
+    QVERIFY(directory.isValid());
+    const auto path = jsonPath(directory);
+    QVERIFY(writeFile(directory.filePath("tasks.json"),
+                      R"({"version":4,"tasks":[
+                          {"title":"CF 1800","difficulty":"1800"},
+                          {"title":"洛谷","difficulty":"普及-"},
+                          {"title":"空难度","difficulty":""}]})"));
+
+    const JsonLoadResult loaded = loadTasksJson(path);
+    QVERIFY(loaded.ok);
+    QVERIFY(loaded.migrated);
+    QCOMPARE(static_cast<int>(loaded.tasks.size()), 3);
+    QCOMPARE(loaded.tasks[0].difficultyRank, 1800);
+    QCOMPARE(loaded.tasks[1].difficultyRank, 1000);
+    QCOMPARE(loaded.tasks[2].difficultyRank, 0);
+
+    auto snapshot = path;
+    snapshot += ".pre-v5";
+    QVERIFY(std::filesystem::exists(snapshot));
+
+    std::string error;
+    QVERIFY(saveTasksJson(loaded.tasks, path, error));
+    const JsonLoadResult again = loadTasksJson(path);
+    QVERIFY(again.ok);
+    QVERIFY(!again.migrated);
+    QCOMPARE(again.tasks[1].difficultyRank, 1000);
+    QCOMPARE(textOf(again.tasks[1].difficulty), QString("普及-"));
+}
+
+void JsonTaskStoreTest::keepsRankWrittenByVersion5() {
+    TempDir directory;
+    QVERIFY(directory.isValid());
+    const auto path = jsonPath(directory);
+    // 文本无法识别但调用方给了 rank 时，以写下来的 rank 为准。
+    QVERIFY(writeFile(directory.filePath("tasks.json"),
+                      R"({"version":5,"tasks":[{"title":"手工","difficulty":"自定义","difficultyRank":2100}]})"));
+
+    const JsonLoadResult loaded = loadTasksJson(path);
+    QVERIFY(loaded.ok);
+    QVERIFY(!loaded.migrated);
+    QCOMPARE(loaded.tasks[0].difficultyRank, 2100);
 }
 
 int main(int argc, char** argv) {

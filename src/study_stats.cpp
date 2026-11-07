@@ -3,11 +3,21 @@
 #include <QDateTime>
 #include <QSet>
 
+#include "difficulty.h"
+
 namespace {
 
 QString valueOrUntimed(const std::string& value) {
     const QString text = QString::fromUtf8(value.c_str()).trimmed();
     return text.isEmpty() ? QString("未标注") : text;
+}
+
+// 难度按归一化档位统计，避免 "800" 与 "普及-" 各占一行、分布失真。
+QString difficultyKey(const Task& task) {
+    if (task.difficultyRank > 0) {
+        return QString::fromUtf8(difficultyBucket(task.difficultyRank).c_str());
+    }
+    return valueOrUntimed(task.difficulty);
 }
 
 void addCount(QMap<QString, int>& counts, const QString& key) {
@@ -26,7 +36,7 @@ StudyStats computeStudyStats(const std::vector<Task>& tasks, const QDate& today)
     for (const Task& task : tasks) {
         addCount(stats.totalByPlatform, valueOrUntimed(task.platform));
         addCount(stats.totalByCategory, valueOrUntimed(task.category));
-        addCount(stats.totalByDifficulty, valueOrUntimed(task.difficulty));
+        addCount(stats.totalByDifficulty, difficultyKey(task));
 
         if (!task.completed) {
             continue;
@@ -35,7 +45,7 @@ StudyStats computeStudyStats(const std::vector<Task>& tasks, const QDate& today)
         ++stats.completed;
         addCount(stats.completedByPlatform, valueOrUntimed(task.platform));
         addCount(stats.completedByCategory, valueOrUntimed(task.category));
-        addCount(stats.completedByDifficulty, valueOrUntimed(task.difficulty));
+        addCount(stats.completedByDifficulty, difficultyKey(task));
 
         const QDateTime completedAt = QDateTime::fromString(
             QString::fromUtf8(task.completedAt.c_str()), Qt::ISODate);
