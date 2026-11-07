@@ -14,7 +14,9 @@
 - 支持把任务导出为 CSV（含平台/题号/标签/备注），也可从旧版 4 列、6 列或新版 8 列 CSV 导入。
 - “文件 → 从备份恢复…”可用 `.bak` 恢复上一版任务数据。
 - 筛选待完成题目，并查看完成数量。
-- 使用 JSON v4 保存到用户数据目录，保存时保留上一版 `.bak` 备份；旧版 `tasks.txt` 和 JSON v2/v3 会自动兼容。
+- 难度保留原始写法（`800`、`普及-`），新增“等第”列按洛谷八档归一；排序、筛选和统计都按归一后的刻度走，不再把 Codeforces 分数和洛谷档位混着算。
+- 选中题目后可“记录一次练习”（日期、耗时、结果、备注）；面板按时间倒序列出记录，并给一句规则化建议（该重做、该看题解、该降难度等）。
+- 使用 JSON v6 保存到用户数据目录，保存时保留上一版 `.bak` 备份；JSON v2–v5 会自动升级（升级前留 `tasks.json.pre-v6` 快照），旧版 `tasks.txt` 也兼容。
 - 学习统计页显示完成率、今日/本周/本月完成、连续打卡、每日目标、平台/分类/难度分布和最近 8 周趋势。
 - 题目名称、分类、难度、平台、题号、标签或备注里包含 Tab、换行等字符时也能正确保存。
 - 输入 Codeforces handle 后查看等级、rating、最近提交和最近 1000 次提交里的不同 AC 题数；可核验关联任务，或把最近 AC 导入任务列表。
@@ -45,6 +47,20 @@ ctest --test-dir build --output-on-failure
 ```
 
 如果使用 Visual Studio 多配置生成器，构建和运行时请加 `--config Release`，测试时加 `-C Release`。
+
+日常开发用仓库根的脚本，一条命令跑完配置、构建、测试和启动冒烟：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\dev.ps1
+```
+
+打便携版（`windeployqt` + MinGW 运行库 + zip）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package.ps1
+```
+
+产物在 `dist/algorithm-practice-notebook-<版本>-windows-x64.zip`。
 
 ## 数据保存在哪里
 
@@ -96,7 +112,7 @@ Codeforces 官方 API 文档：[方法说明](https://codeforces.com/apiHelp/met
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package.ps1
 ```
 
-脚本会执行 CMake 安装、`windeployqt`、补齐 MinGW/第三方依赖 DLL，并生成 `task_notebook_gui-windows.zip`。目标机器不需要安装 Qt 或 MSYS2。
+脚本先构建并跑一遍测试（加 `-SkipTests` 可跳过），再执行 CMake 安装、`windeployqt`、补齐 MinGW/第三方依赖 DLL，最后打包成 `dist\algorithm-practice-notebook-<版本>-windows-x64.zip`，并打印文件数、体积和 SHA256。目标机器不需要安装 Qt 或 MSYS2，解压双击 `task_notebook_gui.exe` 即可。
 
 如果手工打包，至少需要：
 

@@ -2,7 +2,29 @@
 
 本项目的主要变化记录在这里。版本号遵循语义化版本。
 
-## [Unreleased] - v0.6.0
+## [1.0.0] - 2026-11-07
+
+第一个正式版本：把“打开题目”改回系统默认浏览器，GUI 拆成每页一个文件并补上测试，难度归一到统一刻度，新增练习记录与建议。
+
+### Added
+
+- “等第”列：把 `800`、`普及-` 这类混着写的难度归一成洛谷八档（入门/普及-/普及/普及+/提高/提高+/省选/省选·NOI），排序、筛选和统计都用归一后的刻度。
+- 练习记录：选中题目可记录日期、耗时、结果（通过/未通过/没做完/看题解）和备注；面板按时间倒序展示，并给一句规则化建议。
+- `dev.ps1`：一条命令跑完配置、构建、测试和启动冒烟（`-Clean` / `-NoTest` / `-NoSmoke`）。
+- `--smoke-select=N`：冒烟测试可选中指定行，方便给带选中状态的页面截图。
+- `tests/test_practice.cpp`，以及 JSON 往返、v5→v6 迁移用例；`add_project_test()` 让新增套件只改一行。
+
+### Changed
+
+- `gui/main.cpp` 拆成 `main_window.h` 和 `page_tasks` / `page_stats` / `page_codeforces` / `page_luogu` 四个实现文件，最大的单个文件从 2200 多行降到 500 行以内。
+- 样式抽到 `gui/style.cpp`，表单抽到 `gui/task_dialog.cpp`，文本/路径工具抽到 `gui/task_util.cpp`，外链抽到 `gui/external_links.cpp`。
+- 任务数据升到 JSON v6：新增 `difficultyRank` 和 `attempts`，仍按 2–6 兼容读取，升级前写 `tasks.json.pre-v6` 快照。
+- 打包脚本产出带版本号的 zip，并附带 README/LICENSE/CHANGELOG；CI 在打 tag 时自动发布 Release。
+
+### Removed
+
+- 自研的浏览器启动、窗口前置和临时 `--user-data-dir` 栈（约 350 行）：改为 `QDesktopServices::openUrl`，不再每次点开都新建一个没有登录态的临时 profile。
+## [0.6.0]
 
 ### Added
 

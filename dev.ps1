@@ -57,3 +57,5 @@ if (-not $NoSmoke) {
 }
 
 Write-Host "== 完成" -ForegroundColor Green
+# 外部命令（ctest/cmake）可能留下非零 LASTEXITCODE，显式收尾。
+exit 0
