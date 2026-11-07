@@ -42,7 +42,15 @@ if (-not $NoTest) {
 if (-not $NoSmoke) {
     Write-Host "== 冒烟启动" -ForegroundColor Cyan
     $exe = Join-Path $build 'task_notebook_gui.exe'
-    $proc = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -Wait
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe
+    $psi.Arguments = '--smoke-test'
+    $psi.UseShellExecute = $false
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    if (-not $proc.WaitForExit(60000)) {
+        $proc.Kill()
+        throw "冒烟测试超时（60 秒未退出），可能弹出了模态对话框"
+    }
     if ($proc.ExitCode -ne 0) {
         throw "冒烟测试失败（退出码 $($proc.ExitCode)），诊断见 build\smoke.log"
     }
