@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 打 tag 时要创建 Release，默认只读的 GITHUB_TOKEN 会被拒。
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
