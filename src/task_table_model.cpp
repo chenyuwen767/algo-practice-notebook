@@ -1,5 +1,7 @@
 #include "task_table_model.h"
 
+#include <limits>
+
 #include <QStringList>
 
 #include "difficulty.h"
@@ -129,6 +131,11 @@ const Task* TaskTableModel::taskAt(int row) const {
     return &(*tasks_)[static_cast<std::size_t>(row)];
 }
 
+int TaskTableModel::difficultyRankAt(int row) const {
+    const Task* task = taskAt(row);
+    return task != nullptr ? task->difficultyRank : 0;
+}
+
 TaskFilterProxyModel::TaskFilterProxyModel(QObject* parent) : QSortFilterProxyModel(parent) {
     setDynamicSortFilter(true);
 }
@@ -156,6 +163,26 @@ void TaskFilterProxyModel::notifyFilterChanged() {
 #else
     invalidateFilter();
 #endif
+}
+
+bool TaskFilterProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
+    const auto* model = static_cast<const TaskTableModel*>(sourceModel());
+    if (model != nullptr &&
+        (left.column() == TaskTableModel::LevelColumn ||
+         left.column() == TaskTableModel::DifficultyColumn) &&
+        right.column() == left.column()) {
+        // 难度和等第都按归一后的刻度排，未标注的排最后。
+        auto key = [model](int row) {
+            const int rank = model->difficultyRankAt(row);
+            return rank > 0 ? rank : std::numeric_limits<int>::max();
+        };
+        const int leftKey = key(left.row());
+        const int rightKey = key(right.row());
+        if (leftKey != rightKey) {
+            return leftKey < rightKey;
+        }
+    }
+    return QSortFilterProxyModel::lessThan(left, right);
 }
 
 bool TaskFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const {

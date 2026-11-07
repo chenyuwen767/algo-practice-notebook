@@ -16,6 +16,7 @@ private slots:
     void filtersByKeywordAcrossFields();
     void filtersPendingOnly();
     void sortsByTitle();
+    void sortsByNormalizedDifficulty();
     void exposesNotesAsToolTip();
 };
 
@@ -120,6 +121,33 @@ void TaskTableModelTest::sortsByTitle() {
 
     QCOMPARE(proxy.data(proxy.index(0, TaskTableModel::TitleColumn)).toString(), QString("Alpha"));
     QCOMPARE(proxy.data(proxy.index(1, TaskTableModel::TitleColumn)).toString(), QString("Beta"));
+}
+
+void TaskTableModelTest::sortsByNormalizedDifficulty() {
+    std::vector<Task> tasks = sampleTasks();   // Alpha 800、Beta 1200
+    tasks[0].difficultyRank = 800;
+    tasks[1].difficultyRank = 1200;
+    Task gamma;
+    gamma.title = "Gamma";
+    gamma.difficulty = "普及-";
+    gamma.difficultyRank = 1000;
+    Task delta;
+    delta.title = "Delta";                     // 没标难度，应该排最后
+    tasks.push_back(gamma);
+    tasks.push_back(delta);
+
+    TaskTableModel model;
+    model.setTasks(&tasks);
+    TaskFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+    proxy.sort(TaskTableModel::LevelColumn, Qt::AscendingOrder);
+
+    QCOMPARE(proxy.data(proxy.index(0, TaskTableModel::TitleColumn)).toString(), QString("Alpha"));
+    QCOMPARE(proxy.data(proxy.index(1, TaskTableModel::TitleColumn)).toString(), QString("Gamma"));
+    QCOMPARE(proxy.data(proxy.index(2, TaskTableModel::TitleColumn)).toString(), QString("Beta"));
+    QCOMPARE(proxy.data(proxy.index(3, TaskTableModel::TitleColumn)).toString(), QString("Delta"));
+    QCOMPARE(model.difficultyRankAt(0), 800);
+    QCOMPARE(model.difficultyRankAt(2), 1000);
 }
 
 void TaskTableModelTest::exposesNotesAsToolTip() {

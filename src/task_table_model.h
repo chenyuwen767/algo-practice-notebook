@@ -36,6 +36,8 @@ public:
                         int role = Qt::DisplayRole) const override;
 
     const Task* taskAt(int row) const;
+    // 难度列的排序基准：归一后的刻度，0 表示没标难度。
+    int difficultyRankAt(int row) const;
 
 private:
     std::vector<Task>* tasks_ = nullptr;
@@ -50,6 +52,7 @@ public:
 
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
+    bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
 
 private:
     QString keyword_;
