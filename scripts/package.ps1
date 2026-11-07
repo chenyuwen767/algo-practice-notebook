@@ -108,6 +108,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "cmake --install 失败。"
 }
 
+# cmake --install 在 MSVC 下会把运行库放进 bin/ 子目录，发布包不该多一层。
+$binDir = Join-Path $stage "bin"
+if (Test-Path $binDir) {
+    Get-ChildItem -LiteralPath $binDir -File | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stage $_.Name) -Force
+    }
+    Remove-Item -LiteralPath $binDir -Recurse -Force
+}
+
 $exe = Join-Path $stage "task_notebook_gui.exe"
 if (-not (Test-Path $exe)) {
     throw "安装目录中缺少 task_notebook_gui.exe。"
@@ -151,9 +160,10 @@ if (Test-Path $licenseSource) {
     $licenseTarget = Join-Path $stage "licenses"
     New-Item -ItemType Directory -Path $licenseTarget -Force | Out-Null
     Copy-Item -Path (Join-Path $licenseSource "*") -Destination $licenseTarget -Recurse
-    $notice = Join-Path $root "licenses\NOTICE.md"
-    if (Test-Path $notice) {
-        Copy-Item -LiteralPath $notice -Destination $licenseTarget
+    # 仓库里那份 NOTICE 与 LGPL 原文始终补上：CI 的 Qt 目录可能只有空壳。
+    $repoLicenses = Join-Path $root "licenses"
+    if (Test-Path $repoLicenses) {
+        Copy-Item -Path (Join-Path $repoLicenses "*") -Destination $licenseTarget -Recurse -Force
     }
     Write-Host "已附带许可证文本（$licenseSource）。"
 } else {
