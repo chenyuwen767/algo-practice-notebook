@@ -137,6 +137,10 @@ private:
     QPushButton* luoguCreateTaskButton_ = nullptr;
     LuoguProblem luoguProblem_;
     bool luoguProblemLoading_ = false;
+    QLabel* attemptsSummary_ = nullptr;
+    QPlainTextEdit* attemptsText_ = nullptr;
+    QLabel* adviceLabel_ = nullptr;
+    QPushButton* attemptsButton_ = nullptr;
 
     void addPageHeading(QVBoxLayout* layout, const QString& title, const QString& description);
     QFrame* createCard(QWidget* parent);
@@ -145,6 +149,8 @@ private:
     QWidget* createCodeforcesPage();
     QWidget* createLuoguPage();
     void refreshTasks();
+    void updateAttemptPanel();
+    void recordAttempt();
     void updateStatsPage();
     void updateTaskSummary();
     void addTask();

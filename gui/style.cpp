@@ -104,9 +104,32 @@ QTableView, QTableWidget {
     selection-background-color: #d9eafe;
     selection-color: #1b3d69;
 }
+QTableView::item:selected {
+    background: #d9eafe;
+    color: #1b3d69;
+}
 QCheckBox {
     color: #52637c;
     spacing: 7px;
+}
+QLabel#sectionTitle {
+    color: #1f2d3d;
+    font-size: 15px;
+    font-weight: 700;
+}
+QLabel#advice {
+    background: #fff8e6;
+    border: 1px solid #f0d9a8;
+    border-radius: 6px;
+    color: #8a5a00;
+    padding: 8px 10px;
+}
+QPlainTextEdit#attemptList {
+    background: #fbfcfe;
+    border: 1px solid #e6ecf5;
+    border-radius: 6px;
+    color: #3d4d63;
+    font-size: 13px;
 }
 )QSS";
 }

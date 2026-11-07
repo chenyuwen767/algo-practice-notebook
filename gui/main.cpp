@@ -83,6 +83,24 @@ int main(int argc, char* argv[]) {
                 window.findChild<QTabWidget*>() != nullptr) {
                 window.findChild<QTabWidget*>()->setCurrentIndex(1);
             }
+            // 视口里选中第一行，用来验证练习记录面板确实跟着选中走。
+            int selectRow = -1;
+            for (const QString& argument : QCoreApplication::arguments()) {
+                if (argument.startsWith("--smoke-select")) {
+                    selectRow = 0;
+                    const QString suffix = argument.section('=', 1);
+                    if (!suffix.isEmpty()) {
+                        selectRow = suffix.toInt();
+                    }
+                }
+            }
+            if (selectRow >= 0 && window.findChild<QTableView*>("taskTable") != nullptr) {
+                QTableView* table = window.findChild<QTableView*>("taskTable");
+                if (table->model() != nullptr && selectRow < table->model()->rowCount()) {
+                    table->selectRow(selectRow);
+                    table->setCurrentIndex(table->model()->index(selectRow, 0));
+                }
+            }
             const QPixmap shot = window.grab();
             // 优先写程序目录（CI 直接从 build/ 收集产物），临时目录作为兜底。
             const QString primary = QCoreApplication::applicationDirPath() + "/smoke.png";

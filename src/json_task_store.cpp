@@ -16,7 +16,7 @@
 
 namespace {
 
-constexpr int kCurrentVersion = 5;
+constexpr int kCurrentVersion = 6;
 
 QString qpath(const std::filesystem::path& path) {
     return QString::fromStdWString(path.wstring());
@@ -52,15 +52,15 @@ JsonLoadResult loadTasksJson(const std::filesystem::path& fileName) {
     const QJsonValue versionValue = root.value("version");
     const int version = versionValue.isDouble() ? versionValue.toInt() : 4;
     if (version < 2 || version > kCurrentVersion) {
-        result.warnings.push_back("tasks.json 的版本不是 2..5，已按兼容方式读取。");
+        result.warnings.push_back("tasks.json 的版本不是 2..6，已按兼容方式读取。");
     }
     if (version < kCurrentVersion) {
         result.migrated = true;
         // 升级到 v5 前先留一份原始副本：归一化写错时还能找回。
         const QString original = qpath(fileName);
-        const QString snapshot = original + ".pre-v5";
+        const QString snapshot = original + ".pre-v" + QString::number(kCurrentVersion);
         if (!QFileInfo::exists(snapshot) && !QFile::copy(original, snapshot)) {
-            result.warnings.push_back("升级到 v5 前无法备份原文件（tasks.json.pre-v5）。");
+            result.warnings.push_back("升级前无法备份原文件（tasks.json.pre-v" + std::to_string(kCurrentVersion) + "）。");
         }
     }
 
@@ -121,6 +121,28 @@ JsonLoadResult loadTasksJson(const std::filesystem::path& fileName) {
             result.warnings.push_back("第 " + std::to_string(index) + " 条任务的 tags 不是数组，已忽略。");
         }
 
+        const QJsonValue attemptsValue = object.value("attempts");
+        if (attemptsValue.isArray()) {
+            for (const QJsonValue& attemptValue : attemptsValue.toArray()) {
+                if (!attemptValue.isObject()) {
+                    continue;
+                }
+                const QJsonObject attemptObject = attemptValue.toObject();
+                Attempt attempt;
+                attempt.date = toStd(attemptObject.value("date").toString());
+                attempt.minutes = attemptObject.value("minutes").toInt(0);
+                attempt.outcome = toStd(attemptObject.value("outcome").toString());
+                attempt.note = toStd(attemptObject.value("note").toString());
+                if (attempt.date.empty() && attempt.minutes <= 0 && attempt.outcome.empty()) {
+                    continue;
+                }
+                task.attempts.push_back(std::move(attempt));
+            }
+        } else if (!attemptsValue.isUndefined() && !attemptsValue.isNull()) {
+            result.warnings.push_back("第 " + std::to_string(index) +
+                                      " 条任务的 attempts 不是数组，已忽略。");
+        }
+
         result.tasks.push_back(std::move(task));
     }
 
@@ -150,6 +172,17 @@ bool saveTasksJson(const std::vector<Task>& tasks,
             tagsArray.append(QString::fromUtf8(tag.c_str()));
         }
         object.insert("tags", tagsArray);
+
+        QJsonArray attemptsArray;
+        for (const Attempt& attempt : task.attempts) {
+            QJsonObject attemptObject;
+            attemptObject.insert("date", QString::fromUtf8(attempt.date.c_str()));
+            attemptObject.insert("minutes", attempt.minutes);
+            attemptObject.insert("outcome", QString::fromUtf8(attempt.outcome.c_str()));
+            attemptObject.insert("note", QString::fromUtf8(attempt.note.c_str()));
+            attemptsArray.append(attemptObject);
+        }
+        object.insert("attempts", attemptsArray);
         tasksArray.append(object);
     }
 

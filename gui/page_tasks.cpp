@@ -1,6 +1,8 @@
 #include "main_window.h"
 
 #include "difficulty.h"
+#include "attempt_dialog.h"
+#include "practice.h"
 
 using namespace taskui;
 
@@ -36,6 +38,9 @@ QWidget* MainWindow::createTasksPage() {
     taskProxy_->setSourceModel(taskModel_);
 
     taskTable_ = new QTableView(page);
+    taskTable_->setObjectName("taskTable");
+    // 至少露出 4 行，练习记录面板再长也不会把表格压没。
+    taskTable_->setMinimumHeight(260);
     taskTable_->setModel(taskProxy_);
     taskTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
     taskTable_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -51,7 +56,8 @@ QWidget* MainWindow::createTasksPage() {
     taskTable_->horizontalHeader()->setSectionResizeMode(TaskTableModel::LevelColumn,
                                                          QHeaderView::ResizeToContents);
     taskTable_->verticalHeader()->setVisible(false);
-    layout->addWidget(taskTable_);
+    // 表格吃掉剩余高度，练习记录面板保持固定高度。
+    layout->addWidget(taskTable_, 1);
 
     auto* buttons = new QHBoxLayout;
     auto* addButton = new QPushButton("新增题目", page);
@@ -69,6 +75,42 @@ QWidget* MainWindow::createTasksPage() {
     buttons->addWidget(deleteButton);
     buttons->addStretch();
     layout->addLayout(buttons);
+
+    // 练习记录：选中哪道题就显示哪道题的记录，和表格保持同步。
+    QFrame* attemptsCard = createCard(page);
+    auto* attemptsLayout = new QVBoxLayout(attemptsCard);
+    auto* attemptsHeader = new QHBoxLayout;
+    auto* attemptsTitle = new QLabel("练习记录", attemptsCard);
+    attemptsTitle->setObjectName("sectionTitle");
+    attemptsButton_ = new QPushButton("记录一次练习", attemptsCard);
+    attemptsHeader->addWidget(attemptsTitle);
+    attemptsHeader->addStretch();
+    attemptsHeader->addWidget(attemptsButton_);
+    attemptsLayout->addLayout(attemptsHeader);
+
+    attemptsSummary_ = new QLabel(attemptsCard);
+    attemptsSummary_->setObjectName("hint");
+    attemptsSummary_->setWordWrap(true);
+    attemptsLayout->addWidget(attemptsSummary_);
+
+    attemptsText_ = new QPlainTextEdit(attemptsCard);
+    attemptsText_->setObjectName("attemptList");
+    attemptsText_->setReadOnly(true);
+    attemptsText_->setMaximumHeight(110);
+    attemptsText_->setPlaceholderText("选中题目后，这里会按时间倒序列出每次练习。");
+    attemptsLayout->addWidget(attemptsText_);
+
+    adviceLabel_ = new QLabel(attemptsCard);
+    adviceLabel_->setObjectName("advice");
+    adviceLabel_->setWordWrap(true);
+    adviceLabel_->hide();
+    attemptsLayout->addWidget(adviceLabel_);
+
+    layout->addWidget(attemptsCard);
+
+    connect(attemptsButton_, &QPushButton::clicked, this, [this] { recordAttempt(); });
+    connect(taskTable_->selectionModel(), &QItemSelectionModel::currentRowChanged, this,
+            [this](const QModelIndex&, const QModelIndex&) { updateAttemptPanel(); });
 
     taskStatus_ = new QLabel(page);
     taskStatus_->setObjectName("hint");
@@ -122,6 +164,94 @@ void MainWindow::refreshTasks() {
     taskProxy_->setPendingOnly(pendingOnly_->isChecked());
     updateTaskSummary();
     updateStatsPage();
+    updateAttemptPanel();
+}
+
+void MainWindow::updateAttemptPanel() {
+    if (attemptsSummary_ == nullptr) {
+        return;
+    }
+    const int index = selectedTaskIndex();
+    if (index < 0) {
+        attemptsSummary_->setText("选中一行题目后，可以记录每次练习和耗时。");
+        attemptsText_->clear();
+        adviceLabel_->hide();
+        attemptsButton_->setEnabled(false);
+        return;
+    }
+
+    attemptsButton_->setEnabled(true);
+    const Task& task = tasks_[static_cast<std::size_t>(index)];
+    const QString title = QString::fromUtf8(task.title.c_str());
+    const AttemptSummary summary = summarizeAttempts(task.attempts);
+    if (summary.count == 0) {
+        attemptsSummary_->setText(QString("「%1」还没有练习记录。").arg(title));
+        attemptsText_->clear();
+    } else {
+        attemptsSummary_->setText(QString("「%1」共 %2 次练习 · 通过 %3 次 · 累计 %4 分钟")
+                                      .arg(title)
+                                      .arg(summary.count)
+                                      .arg(summary.acCount)
+                                      .arg(summary.totalMinutes));
+        QStringList lines;
+        for (auto it = task.attempts.rbegin(); it != task.attempts.rend(); ++it) {
+            QString line = QString::fromUtf8(it->date.c_str());
+            if (line.isEmpty()) {
+                line = "未记日期";
+            }
+            line += "   " + QString::fromUtf8(attemptOutcomeLabel(it->outcome).c_str());
+            if (it->minutes > 0) {
+                line += QString("   %1 分钟").arg(it->minutes);
+            }
+            if (!it->note.empty()) {
+                line += "   " + QString::fromUtf8(it->note.c_str());
+            }
+            lines << line;
+        }
+        attemptsText_->setPlainText(lines.join('\n'));
+    }
+
+    const QString advice =
+        QString::fromUtf8(practiceAdvice(task, QDate::currentDate()).c_str());
+    adviceLabel_->setText(advice);
+    adviceLabel_->setVisible(!advice.isEmpty());
+}
+
+void MainWindow::recordAttempt() {
+    const int index = selectedTaskIndex();
+    if (index < 0) {
+        QMessageBox::information(this, "记录练习", "先在表格里选中一道题。");
+        return;
+    }
+
+    const QString title = QString::fromUtf8(tasks_[static_cast<std::size_t>(index)].title.c_str());
+    QString date = QDate::currentDate().toString(Qt::ISODate);
+    int minutes = 30;
+    QString outcome = QString::fromUtf8(attempt_outcome::kAccepted);
+    QString note;
+    if (!promptAttempt(this, "记录练习 · " + title, date, minutes, outcome, note)) {
+        return;
+    }
+
+    rememberState();
+    Task& task = tasks_[static_cast<std::size_t>(index)];
+    Attempt attempt;
+    attempt.date = toTaskText(date);
+    attempt.minutes = minutes;
+    attempt.outcome = toTaskText(outcome);
+    attempt.note = toTaskText(note);
+    task.attempts.push_back(attempt);
+
+    // 通过了就顺手把状态改成已完成，省得记完还要再点一次。
+    if (outcome == QString::fromUtf8(attempt_outcome::kAccepted) && !task.completed) {
+        task.completed = true;
+        if (task.completedAt.empty()) {
+            task.completedAt = toTaskText(QDateTime::currentDateTime().toString(Qt::ISODate));
+        }
+    }
+    saveAndRefresh();
+    taskStatus_->setText("已记录一次练习。");
+    taskStatus_->show();
 }
 
 void MainWindow::updateTaskSummary() {

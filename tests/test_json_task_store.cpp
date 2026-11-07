@@ -37,6 +37,8 @@ private slots:
     void loadsVersion2WithoutNewFields();
     void migratesVersion4ToRankedDifficulty();
     void keepsRankWrittenByVersion5();
+    void roundTripsAttempts();
+    void migratesVersion5IfNoAttempts();
 };
 
 void JsonTaskStoreTest::roundTripPreservesAllFields() {
@@ -186,7 +188,7 @@ void JsonTaskStoreTest::migratesVersion4ToRankedDifficulty() {
     QCOMPARE(loaded.tasks[2].difficultyRank, 0);
 
     auto snapshot = path;
-    snapshot += ".pre-v5";
+    snapshot += ".pre-v6";
     QVERIFY(std::filesystem::exists(snapshot));
 
     std::string error;
@@ -208,8 +210,60 @@ void JsonTaskStoreTest::keepsRankWrittenByVersion5() {
 
     const JsonLoadResult loaded = loadTasksJson(path);
     QVERIFY(loaded.ok);
-    QVERIFY(!loaded.migrated);
+    // v5 只缺 attempts 字段，升到 v6 会在读取时补空数组，但 rank 必须原样保留。
+    QVERIFY(loaded.migrated);
     QCOMPARE(loaded.tasks[0].difficultyRank, 2100);
+}
+
+void JsonTaskStoreTest::roundTripsAttempts() {
+    TempDir directory;
+    QVERIFY(directory.isValid());
+    const auto path = jsonPath(directory);
+
+    Task task;
+    task.title = "带练习记录";
+    Attempt first;
+    first.date = "2026-01-01";
+    first.minutes = 35;
+    first.outcome = "rejected";
+    first.note = "边界没想清楚";
+    Attempt second;
+    second.date = "2026-01-02";
+    second.minutes = 20;
+    second.outcome = "ac";
+    task.attempts = {first, second};
+
+    std::string error;
+    QVERIFY(saveTasksJson({task}, path, error));
+
+    const JsonLoadResult loaded = loadTasksJson(path);
+    QVERIFY(loaded.ok);
+    QVERIFY(!loaded.migrated);
+    QCOMPARE(static_cast<int>(loaded.tasks.size()), 1);
+    const Task& back = loaded.tasks[0];
+    QCOMPARE(static_cast<int>(back.attempts.size()), 2);
+    QCOMPARE(textOf(back.attempts[0].date), QString("2026-01-01"));
+    QCOMPARE(back.attempts[0].minutes, 35);
+    QCOMPARE(textOf(back.attempts[0].outcome), QString("rejected"));
+    QCOMPARE(textOf(back.attempts[0].note), QString("边界没想清楚"));
+    QCOMPARE(back.attempts[1].minutes, 20);
+    QCOMPARE(textOf(back.attempts[1].outcome), QString("ac"));
+}
+
+void JsonTaskStoreTest::migratesVersion5IfNoAttempts() {
+    TempDir directory;
+    QVERIFY(directory.isValid());
+    const auto path = jsonPath(directory);
+    QVERIFY(writeFile(directory.filePath("tasks.json"),
+                      R"({"version":5,"tasks":[{"title":"v5 老文件","difficulty":"普及","difficultyRank":1200}]})"));
+
+    const JsonLoadResult loaded = loadTasksJson(path);
+    QVERIFY(loaded.ok);
+    QVERIFY(loaded.migrated);
+    QVERIFY(loaded.tasks[0].attempts.empty());
+    auto snapshot = path;
+    snapshot += ".pre-v6";
+    QVERIFY(std::filesystem::exists(snapshot));
 }
 
 int main(int argc, char** argv) {

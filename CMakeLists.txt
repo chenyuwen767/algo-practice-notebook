@@ -22,6 +22,7 @@ endif()
 
 add_executable(task_notebook_gui WIN32
     gui/main.cpp
+    gui/attempt_dialog.cpp
     gui/main_window.cpp
     gui/page_tasks.cpp
     gui/page_stats.cpp
@@ -34,6 +35,7 @@ add_executable(task_notebook_gui WIN32
     src/app_paths.cpp
     src/codeforces_problem.cpp
     src/difficulty.cpp
+    src/practice.cpp
     src/json_task_store.cpp
     src/luogu_problem.cpp
     src/oj_client.cpp
@@ -69,6 +71,7 @@ if (BUILD_TESTING)
     add_project_test(test_json_task_store tests/test_json_task_store.cpp src/json_task_store.cpp src/difficulty.cpp)
     add_project_test(test_task_table_model tests/test_task_table_model.cpp src/task_table_model.cpp src/difficulty.cpp)
     add_project_test(test_difficulty tests/test_difficulty.cpp src/difficulty.cpp)
+    add_project_test(test_practice tests/test_practice.cpp src/practice.cpp src/difficulty.cpp)
     add_project_test(test_codeforces_problem tests/test_codeforces_problem.cpp src/codeforces_problem.cpp)
     add_project_test(test_luogu_problem tests/test_luogu_problem.cpp src/luogu_problem.cpp)
     add_project_test(test_study_stats tests/test_study_stats.cpp src/study_stats.cpp src/difficulty.cpp)
