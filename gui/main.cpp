@@ -15,7 +15,7 @@
 #if __has_include("version.h")
 #include "version.h"
 #else
-#define APP_VERSION "1.0.1"
+#define APP_VERSION "1.0.2"
 #endif
 
 using namespace taskui;

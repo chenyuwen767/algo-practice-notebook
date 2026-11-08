@@ -12,6 +12,7 @@ private slots:
     void mapsChromiumBasedProgIds();
     void mapsFirefoxAndOpera();
     void ignoresUnknownProgId();
+    void namesBrowsersForHumans();
 };
 
 void ExternalLinksTest::mapsEdgeProgId() {
@@ -33,6 +34,15 @@ void ExternalLinksTest::mapsFirefoxAndOpera() {
 void ExternalLinksTest::ignoresUnknownProgId() {
     QVERIFY(taskui::browserExecutableName(QString()).isEmpty());
     QVERIFY(taskui::browserExecutableName("SomeOtherBrowser.Url").isEmpty());
+}
+
+void ExternalLinksTest::namesBrowsersForHumans() {
+    QCOMPARE(taskui::browserDisplayName("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"),
+             QString("Edge"));
+    QCOMPARE(taskui::browserDisplayName("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"),
+             QString("Chrome"));
+    QCOMPARE(taskui::browserDisplayName("/usr/bin/firefox.exe"), QString("Firefox"));
+    QCOMPARE(taskui::browserDisplayName(QString()), QString());
 }
 
 QTEST_MAIN(ExternalLinksTest)

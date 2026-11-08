@@ -270,15 +270,22 @@ void MainWindow::openSelectedProblem() {
     }
 
     QApplication::clipboard()->setText(url.toString());
-    if (!openExternalUrl(url)) {
+    QString browser;
+    if (!openExternalUrl(url, &browser)) {
         QMessageBox::warning(
             this,
             "无法打开浏览器",
-            "未能启动系统浏览器。链接已复制到剪贴板，请手动粘贴访问：\n" +
+            "没能启动浏览器（默认浏览器和其它已安装的浏览器都起不来）。"
+            "链接已复制到剪贴板，请手动粘贴到地址栏访问：\n" +
                 url.toString());
         return;
     }
-    taskStatus_->setText("已请求浏览器打开；若没反应，链接已在剪贴板：" + url.toString());
+    const QString browserName = browser.isEmpty() ? QString() : taskui::browserDisplayName(browser);
+    if (browserName.isEmpty()) {
+        taskStatus_->setText("已交给系统默认浏览器；若没反应，链接已在剪贴板：" + url.toString());
+    } else {
+        taskStatus_->setText("已在 " + browserName + " 中打开题目（链接已复制）。");
+    }
     taskStatus_->show();
     QTimer::singleShot(6000, this, [this] {
         if (taskStatus_ != nullptr) {
